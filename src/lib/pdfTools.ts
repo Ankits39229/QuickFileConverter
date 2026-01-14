@@ -652,8 +652,16 @@ export async function addWatermarkToPdf(
 
 // Convert PDF to Word (extract text and create DOCX)
 export async function convertPdfToWord(file: File): Promise<Blob> {
-  const pdfjsLib = await import('pdfjs-dist');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  // Use legacy build in Node.js as recommended
+  let pdfjsLib;
+  if (typeof window === 'undefined') {
+    // Node.js environment - use legacy build
+    pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  } else {
+    // Browser environment
+    pdfjsLib = await import('pdfjs-dist');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  }
   
   const { Document, Paragraph, TextRun, Packer } = await import('docx');
   

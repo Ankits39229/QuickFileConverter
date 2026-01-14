@@ -379,12 +379,43 @@ export async function convertWordToPdfEnhanced(file: File): Promise<Blob> {
   try {
     // Extract text with mammoth (better formatting)
     const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.convertToHtml({ arrayBuffer });
+    
+    // mammoth expects Buffer in Node.js or ArrayBuffer in browser
+    let mammothInput;
+    if (typeof Buffer !== 'undefined' && !(arrayBuffer instanceof Buffer)) {
+      // Node.js - convert ArrayBuffer to Buffer
+      mammothInput = { buffer: Buffer.from(arrayBuffer) };
+    } else {
+      // Browser
+      mammothInput = { arrayBuffer };
+    }
+    
+    const result = await mammoth.convertToHtml(mammothInput);
     const htmlContent = result.value;
     
-    // Parse HTML
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlContent, 'text/html');
+    // Parse HTML - browser has DOMParser, Node.js doesn't
+    let bodyElements: HTMLCollection;
+    
+    if (typeof window !== 'undefined' && typeof DOMParser !== 'undefined') {
+      // Browser environment - use DOMParser
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlContent, 'text/html');
+      bodyElements = doc.body.children;
+    } else {
+      // Node.js environment - manually parse simple HTML
+      // For production Electron app, this path won't be used as Electron provides DOMParser
+      const lines = htmlContent
+        .replace(/<[^>]+>/g, '\n')
+        .split('\n')
+        .filter(line => line.trim());
+      
+      // Create a minimal mock structure for Node.js testing
+      bodyElements = lines.map(text => ({
+        tagName: 'P',
+        textContent: text,
+        querySelector: () => null
+      })) as any;
+    }
     
     // Create PDF
     const pdfDoc = await PDFDocument.create();
@@ -399,8 +430,6 @@ export async function convertWordToPdfEnhanced(file: File): Promise<Blob> {
     
     let page = pdfDoc.addPage([pageWidth, pageHeight]);
     let yPosition = pageHeight - margin;
-    
-    const bodyElements = doc.body.children;
     
     for (let i = 0; i < bodyElements.length; i++) {
       const element = bodyElements[i];
