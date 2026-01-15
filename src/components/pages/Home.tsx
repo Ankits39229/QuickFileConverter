@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { 
-  Monitor, 
+  BookCopy, 
   FileText, 
-  Activity,
+  Image,
+  FileSpreadsheet,
   Loader2
 } from 'lucide-react';
 
@@ -19,8 +20,9 @@ const HomePage = () => {
   // Navigation mapping based on App.tsx page components
   const pageMapping: Record<string, string> = {
     pdf: 'tools',
-    processes: 'processespage',
-    systeminfo: 'systeminfo'
+    image: 'processespage',
+    excel: 'exceltools',
+    word: 'logs'
   };
 
   // Handle navigation to different pages
@@ -50,21 +52,27 @@ const HomePage = () => {
   const quickActions = [
     {
       title: "PDF Tools",
-      description: "Create, edit and manage PDF documents",
-      icon: FileText,
+      description: "Merge, split, compress, and convert PDF files",
+      icon: BookCopy,
       action: "pdf"
     },
     {
-      title: "Processes",
-      description: "Monitor and manage system processes",
-      icon: Activity,
-      action: "processes"
+      title: "Excel Tools",
+      description: "Merge, split, and convert Excel spreadsheets",
+      icon: FileSpreadsheet,
+      action: "excel"
     },
     {
-      title: "System Info",
-      description: "View detailed system information",
-      icon: Monitor,
-      action: "systeminfo"
+      title: "Word Tools",
+      description: "Convert and process Word documents",
+      icon: FileText,
+      action: "word"
+    },
+    {
+      title: "Image Tools",
+      description: "Resize, convert, compress, and edit images",
+      icon: Image,
+      action: "image"
     }
   ];
 

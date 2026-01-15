@@ -12,6 +12,8 @@ import {
   convertWordToHtml,
   getWordStats
 } from '../../lib/wordTools';
+import { sanitizeText, sanitizeNumber, validateBatchFileSize, FILE_SIZE_LIMITS } from '../../lib/sanitize';
+import { generateUniqueFilename } from '../../lib/fileNameUtils';
 
 type Operation = 'word-to-pdf' | 'word-to-txt' | 'merge-word' | 'extract-text' | 'word-to-html' | 'word-stats' | 'split-pages' | 'add-headers';
 
@@ -35,6 +37,9 @@ const WordToolsPage: React.FC = () => {
   // Add headers options
   const [headerText, setHeaderText] = useState<string>('Document Header');
   
+  // Track downloaded filenames to prevent duplicates
+  const downloadedFilenames = useRef<string[]>([]);
+  
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const colors = styling.colors;
@@ -57,6 +62,19 @@ const WordToolsPage: React.FC = () => {
       setError('All files must be Word documents (.docx or .doc).');
       return;
     }
+    
+    // Validate file sizes
+    const sizeValidation = validateBatchFileSize(
+      arr, 
+      FILE_SIZE_LIMITS.WORD * arr.length, 
+      FILE_SIZE_LIMITS.WORD, 
+      'Word'
+    );
+    if (!sizeValidation.valid) {
+      setError(sizeValidation.error || 'File size validation failed.');
+      return;
+    }
+    
     setError(null);
     setResultUrls([]);
     setExtractedText('');
@@ -182,8 +200,9 @@ const WordToolsPage: React.FC = () => {
           break;
         
         case 'split-pages':
+          const sanitizedPagesPerSplit = sanitizeNumber(pagesPerSplit, 1, 100, 1);
           for (const localFile of files) {
-            const blobs = await splitWordByPages(localFile.file, pagesPerSplit);
+            const blobs = await splitWordByPages(localFile.file, sanitizedPagesPerSplit);
             const originalName = localFile.file.name;
             const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
             
@@ -198,8 +217,13 @@ const WordToolsPage: React.FC = () => {
           break;
         
         case 'add-headers':
+          const sanitizedHeaderText = sanitizeText(headerText, 500);
+          if (!sanitizedHeaderText) {
+            setError('Please enter valid header text.');
+            return;
+          }
           for (const localFile of files) {
-            const blob = await addHeadersToWord(localFile.file, headerText);
+            const blob = await addHeadersToWord(localFile.file, sanitizedHeaderText);
             const originalName = localFile.file.name;
             const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
             results.push({
@@ -224,27 +248,38 @@ const WordToolsPage: React.FC = () => {
 
   const downloadAll = async () => {
     if (resultUrls.length === 1) {
-      // Single file - direct download
+      // Single file - direct download with unique filename
+      const uniqueFilename = generateUniqueFilename(resultUrls[0].name, downloadedFilenames.current);
+      downloadedFilenames.current.push(uniqueFilename);
+      
       const link = document.createElement('a');
       link.href = resultUrls[0].url;
-      link.download = resultUrls[0].name;
+      link.download = uniqueFilename;
       link.click();
     } else {
-      // Multiple files - create ZIP
+      // Multiple files - create ZIP with unique filename
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
       
+      // Use unique names inside ZIP too
+      const zipFilenames: string[] = [];
       for (const result of resultUrls) {
         const response = await fetch(result.url);
         const blob = await response.blob();
-        zip.file(result.name, blob);
+        const uniqueName = generateUniqueFilename(result.name, zipFilenames);
+        zipFilenames.push(uniqueName);
+        zip.file(uniqueName, blob);
       }
       
       const zipBlob = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(zipBlob);
+      
+      const uniqueZipName = generateUniqueFilename('processed-documents.zip', downloadedFilenames.current);
+      downloadedFilenames.current.push(uniqueZipName);
+      
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'processed-documents.zip';
+      link.download = uniqueZipName;
       link.click();
       URL.revokeObjectURL(url);
     }

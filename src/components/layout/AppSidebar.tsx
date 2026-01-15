@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Home,
-  Activity,
+  Image,
   FileText,
   BookCopy,
   FileSpreadsheet,
@@ -25,11 +25,6 @@ const navigationItems: NavigationItem[] = [
     page: 'home',
   },
   {
-    title: 'Image Tools',
-    icon: Activity,
-    page: 'processespage',
-  },
-  {
     title: 'PDF Tools',
     icon: BookCopy,
     page: 'tools',
@@ -43,6 +38,11 @@ const navigationItems: NavigationItem[] = [
     title: 'Word Tools',
     icon: FileText,
     page: 'logs',
+  },
+  {
+    title: 'Image Tools',
+    icon: Image,
+    page: 'processespage',
   },
 ];
 

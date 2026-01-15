@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styling from '../../../styling.json';
-import { Upload, File as FileIcon, X, ArrowUp, ArrowDown, Wand2, Images, FileSymlink, Download, AlertCircle, Scissors, RotateCw, Trash2, Hash, Droplet, FileType2 } from 'lucide-react';
+import { Upload, File as FileIcon, X, ArrowUp, ArrowDown, Wand2, Images, FileSymlink, Download, AlertCircle, Scissors, RotateCw, Trash2, Hash, Droplet, FileType2, Undo2, Redo2, Eye } from 'lucide-react';
 import styles from './pdfTools.module.css';
+import { FilePreviewModal } from '../ui/FilePreviewModal';
+import { generateFilePreview, FilePreview } from '../../lib/filePreview';
+import { useStateHistory } from '../../lib/stateHistory';
+import { generateUniqueFilename } from '../../lib/fileNameUtils';
 import { 
   mergePdfFiles, 
   splitPdf, 
@@ -22,6 +26,7 @@ import {
   PageOrientation, 
   PageSize 
 } from '../../lib/pdfTools';
+import { sanitizeText, sanitizeNumber, sanitizePageRange, sanitizePageNumbers, validateFileSize, validateBatchFileSize, FILE_SIZE_LIMITS } from '../../lib/sanitize';
 
 type Operation = 'merge' | 'images-to-pdf' | 'split' | 'compress' | 'pdf-to-images' | 'rotate' | 'remove-pages' | 'page-numbers' | 'watermark' | 'pdf-to-word';
 
@@ -70,7 +75,21 @@ const ToolsPage: React.FC = () => {
   // PDF to images result
   const [extractedImages, setExtractedImages] = useState<Array<{ pageNumber: number; dataUrl: string }>>([]);
   
+  // Drag & drop feedback
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragValid, setDragValid] = useState(true);
+  
+  // File preview
+  const [previewFile, setPreviewFile] = useState<FilePreview | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  
+  // Track downloaded filenames to prevent duplicates
+  const downloadedFilenames = useRef<string[]>([]);
+  
   const inputRef = useRef<HTMLInputElement | null>(null);
+  
+  // Undo/Redo functionality
+  const stateHistory = useStateHistory({ files, operation, pageRanges, totalPages });
 
   const colors = styling.colors;
 
@@ -97,6 +116,18 @@ const ToolsPage: React.FC = () => {
       setError(operation === 'images-to-pdf' ? 'All files must be images (png/jpg).' : 'All files must be PDFs.');
       return;
     }
+    
+    // Validate file sizes
+    const sizeLimit = operation === 'images-to-pdf' ? FILE_SIZE_LIMITS.IMAGE : FILE_SIZE_LIMITS.PDF;
+    const sizeValidation = operation === 'images-to-pdf' 
+      ? validateBatchFileSize(arr, FILE_SIZE_LIMITS.IMAGE_BATCH, FILE_SIZE_LIMITS.IMAGE, 'image')
+      : validateBatchFileSize(arr, sizeLimit * arr.length, sizeLimit, 'PDF');
+    
+    if (!sizeValidation.valid) {
+      setError(sizeValidation.error || 'File size validation failed.');
+      return;
+    }
+    
     setError(null);
     setResultUrl(null);
     setFiles(prev => ([...prev, ...arr.map(f => ({ id: crypto.randomUUID(), file: f }))]));
@@ -115,10 +146,50 @@ const ToolsPage: React.FC = () => {
 
   const onDrop: React.DragEventHandler<HTMLDivElement> = e => {
     e.preventDefault();
+    setIsDragging(false);
     onFiles(e.dataTransfer.files);
   };
-  const onDragOver: React.DragEventHandler<HTMLDivElement> = e => { e.preventDefault(); };
+  
+  const onDragOver: React.DragEventHandler<HTMLDivElement> = e => { 
+    e.preventDefault();
+  };
+  
+  const onDragEnter: React.DragEventHandler<HTMLDivElement> = e => {
+    e.preventDefault();
+    setIsDragging(true);
+    
+    // Check if dragged files are valid
+    const files = Array.from(e.dataTransfer.items);
+    const allValid = files.every(item => {
+      if (operation === 'images-to-pdf') {
+        return item.type.startsWith('image/');
+      }
+      return item.type === 'application/pdf';
+    });
+    setDragValid(allValid);
+  };
+  
+  const onDragLeave: React.DragEventHandler<HTMLDivElement> = e => {
+    e.preventDefault();
+    // Only set dragging false if leaving the drop zone itself
+    if (e.currentTarget === e.target) {
+      setIsDragging(false);
+    }
+  };
 
+  const handlePreviewFile = async (file: File) => {
+    setLoadingPreview(true);
+    try {
+      const preview = await generateFilePreview(file);
+      setPreviewFile(preview);
+    } catch (error) {
+      console.error('Failed to generate preview:', error);
+      setError('Failed to generate file preview');
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+  
   const removeFile = (id: string) => setFiles(prev => prev.filter(f => f.id !== id));
   const moveFile = (id: string, dir: -1 | 1) => {
     setFiles(prev => {
@@ -133,7 +204,13 @@ const ToolsPage: React.FC = () => {
     });
   };
 
-  const clearAll = () => { 
+  const clearAll = () => {
+    // Save current state before clearing
+    stateHistory.saveState(
+      { files, operation, pageRanges, totalPages },
+      `Clear ${files.length} file(s)`
+    );
+    
     setFiles([]); 
     setResultUrl(null); 
     setError(null); 
@@ -155,6 +232,26 @@ const ToolsPage: React.FC = () => {
     setWatermarkOpacity(0.3);
     setWatermarkRotation(45);
     setExtractedImages([]);
+  };
+  
+  const handleUndo = () => {
+    const prevState = stateHistory.undo();
+    if (prevState) {
+      setFiles(prevState.files || []);
+      setOperation(prevState.operation || null);
+      setPageRanges(prevState.pageRanges || '');
+      setTotalPages(prevState.totalPages || 0);
+    }
+  };
+  
+  const handleRedo = () => {
+    const nextState = stateHistory.redo();
+    if (nextState) {
+      setFiles(nextState.files || []);
+      setOperation(nextState.operation || null);
+      setPageRanges(nextState.pageRanges || '');
+      setTotalPages(nextState.totalPages || 0);
+    }
   };
 
 
@@ -212,8 +309,14 @@ const ToolsPage: React.FC = () => {
               return;
             }
             
+            const sanitizedPageRanges = sanitizePageRange(pageRanges, totalPages);
+            if (!sanitizedPageRanges) {
+              setError('Invalid page ranges. Please use format like: 1-5,7,9-12');
+              return;
+            }
+            
             try {
-              const rangePdfs = await splitPdfByRanges(fileList[0], pageRanges);
+              const rangePdfs = await splitPdfByRanges(fileList[0], sanitizedPageRanges);
               
               if (rangePdfs.length === 1) {
                 // Single range, return PDF directly
@@ -297,15 +400,25 @@ const ToolsPage: React.FC = () => {
           for (const part of parts) {
             if (part.includes('-')) {
               const [start, end] = part.split('-').map(n => parseInt(n.trim()));
+              if (isNaN(start) || isNaN(end) || start < 1 || end < 1) continue;
               for (let i = start; i <= end; i++) {
                 pages.push(i);
               }
             } else {
-              pages.push(parseInt(part.trim()));
+              const num = parseInt(part.trim());
+              if (!isNaN(num) && num > 0) {
+                pages.push(num);
+              }
             }
           }
           
-          const blob = await removePagesFromPdf(fileList[0], pages);
+          const sanitizedPages = sanitizePageNumbers(pages, totalPages || 1000);
+          if (sanitizedPages.length === 0) {
+            setError('Invalid page numbers provided.');
+            return;
+          }
+          
+          const blob = await removePagesFromPdf(fileList[0], sanitizedPages);
           url = URL.createObjectURL(blob);
           break;
         }
@@ -314,10 +427,13 @@ const ToolsPage: React.FC = () => {
             setError('Please select exactly one PDF file.');
             return;
           }
+          const sanitizedSize = sanitizeNumber(pageNumberSize, 6, 72, 12);
+          const sanitizedStart = sanitizeNumber(pageNumberStart, 1, 10000, 1);
+          
           const blob = await addPageNumbersToPdf(fileList[0], {
             position: pageNumberPosition,
-            fontSize: pageNumberSize,
-            startNumber: pageNumberStart
+            fontSize: sanitizedSize,
+            startNumber: sanitizedStart
           });
           url = URL.createObjectURL(blob);
           break;
@@ -327,10 +443,19 @@ const ToolsPage: React.FC = () => {
             setError('Please select exactly one PDF file.');
             return;
           }
-          const blob = await addWatermarkToPdf(fileList[0], watermarkText, {
-            fontSize: watermarkSize,
-            opacity: watermarkOpacity,
-            rotation: watermarkRotation,
+          const sanitizedWatermarkText = sanitizeText(watermarkText, 200);
+          if (!sanitizedWatermarkText) {
+            setError('Please enter valid watermark text.');
+            return;
+          }
+          const sanitizedSize = sanitizeNumber(watermarkSize, 8, 200, 60);
+          const sanitizedOpacity = Math.max(0, Math.min(1, watermarkOpacity));
+          const sanitizedRotation = Math.max(-360, Math.min(360, watermarkRotation));
+          
+          const blob = await addWatermarkToPdf(fileList[0], sanitizedWatermarkText, {
+            fontSize: sanitizedSize,
+            opacity: sanitizedOpacity,
+            rotation: sanitizedRotation,
             color: { r: 0.5, g: 0.5, b: 0.5 }
           });
           url = URL.createObjectURL(blob);
@@ -453,17 +578,43 @@ const ToolsPage: React.FC = () => {
         </section>
       )}
       {operation && (
-        <section className="flex flex-wrap gap-4">
+        <section className="flex flex-wrap gap-4 items-center">
           <button onClick={() => { setOperation(null); clearAll(); }} className={styles.modeBtn}>Back</button>
           <span className="text-sm font-medium">Current: {operation}</span>
+          
+          {/* Undo/Redo buttons */}
+          <div className={styles.historyButtons}>
+            <button 
+              onClick={handleUndo} 
+              disabled={!stateHistory.canUndo}
+              className={styles.undoBtn}
+              title={stateHistory.getUndoOperation() || 'Undo'}
+            >
+              <Undo2 size={16} />
+              <span>Undo</span>
+            </button>
+            <button 
+              onClick={handleRedo} 
+              disabled={!stateHistory.canRedo}
+              className={styles.redoBtn}
+              title={stateHistory.getRedoOperation() || 'Redo'}
+            >
+              <Redo2 size={16} />
+              <span>Redo</span>
+            </button>
+          </div>
         </section>
       )}
 
   {operation && <div
         onDrop={onDrop}
         onDragOver={onDragOver}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
         onClick={() => inputRef.current?.click()}
-        className={`group relative text-center hover:shadow-md ${styles.dropZone}`}
+        className={`group relative text-center hover:shadow-md ${styles.dropZone} ${
+          isDragging ? (dragValid ? styles.dragOver : styles.dragReject) : ''
+        }`}
       >
         <input
           ref={inputRef}
@@ -480,8 +631,16 @@ const ToolsPage: React.FC = () => {
           <p className="text-sm">
             <strong>Click to choose</strong> or drag & drop {operation === 'images-to-pdf' ? 'images' : 'PDF files'} here
           </p>
+          <span className={styles.smallNote}>
+            Accepted: {operation === 'images-to-pdf' ? 'PNG, JPG, JPEG, WebP, GIF' : 'PDF files only'}
+          </span>
           <span className={styles.smallNote}>Order matters for the output</span>
         </div>
+        {isDragging && (
+          <div className={styles.dropZoneHint}>
+            {dragValid ? '✓ Drop files here' : '✗ Invalid file type'}
+          </div>
+        )}
       </div>}
 
       {error && (
@@ -848,6 +1007,14 @@ const ToolsPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-1">
                   <button
+                    onClick={() => handlePreviewFile(lf.file)}
+                    className={styles.previewBtn}
+                    title="Preview file"
+                    disabled={loadingPreview}
+                  >
+                    <Eye size={14} />
+                  </button>
+                  <button
                     disabled={idx === 0}
                     onClick={() => moveFile(lf.id, -1)}
                     className={`p-1 disabled:opacity-30 ${styles.iconBtn}`}
@@ -897,20 +1064,25 @@ const ToolsPage: React.FC = () => {
             {resultUrl && (
               <a
                 href={resultUrl}
-                download={
-                  operation === 'merge' ? 'merged.pdf' :
-                  operation === 'split' ? (splitMode === 'all' ? 'split-pages.zip' : 
-                    pageRanges.split(',').length === 1 ? `pages-${pageRanges}.pdf` : 'split-ranges.zip') :
-                  operation === 'compress' ? `compressed-${compressionLevel}.pdf` :
-                  operation === 'rotate' ? `rotated-${rotationAngle}.pdf` :
-                  operation === 'remove-pages' ? 'pages-removed.pdf' :
-                  operation === 'page-numbers' ? 'with-page-numbers.pdf' :
-                  operation === 'watermark' ? 'with-watermark.pdf' :
-                  operation === 'pdf-to-word' ? 'converted.docx' :
-                  operation === 'pdf-to-images' ? 'extracted-images.zip' :
-                  operation === 'images-to-pdf' ? 'images-to-pdf.pdf' :
-                  'output.pdf'
-                }
+                download={(() => {
+                  const baseFilename = 
+                    operation === 'merge' ? 'merged.pdf' :
+                    operation === 'split' ? (splitMode === 'all' ? 'split-pages.zip' : 
+                      pageRanges.split(',').length === 1 ? `pages-${pageRanges}.pdf` : 'split-ranges.zip') :
+                    operation === 'compress' ? `compressed-${compressionLevel}.pdf` :
+                    operation === 'rotate' ? `rotated-${rotationAngle}.pdf` :
+                    operation === 'remove-pages' ? 'pages-removed.pdf' :
+                    operation === 'page-numbers' ? 'with-page-numbers.pdf' :
+                    operation === 'watermark' ? 'with-watermark.pdf' :
+                    operation === 'pdf-to-word' ? 'converted.docx' :
+                    operation === 'pdf-to-images' ? 'extracted-images.zip' :
+                    operation === 'images-to-pdf' ? 'images-to-pdf.pdf' :
+                    'output.pdf';
+                  
+                  const uniqueFilename = generateUniqueFilename(baseFilename, downloadedFilenames.current);
+                  downloadedFilenames.current.push(uniqueFilename);
+                  return uniqueFilename;
+                })()}
                 className={`px-4 py-2 flex items-center gap-2 ${styles.primaryBtn}`}
               >
                 <Download size={16} /> Download
@@ -934,6 +1106,12 @@ const ToolsPage: React.FC = () => {
       {operation === 'merge' && files.length === 1 && (
         <p className={styles.formText}>Add at least one more PDF file to merge.</p>
       )}
+      
+      {/* File Preview Modal */}
+      <FilePreviewModal 
+        preview={previewFile} 
+        onClose={() => setPreviewFile(null)} 
+      />
     </div>
   );
 };

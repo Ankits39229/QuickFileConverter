@@ -17,6 +17,8 @@ import {
   formatFileSize,
   CompressionLevel
 } from '../../lib/excelTools';
+import { sanitizePassword, sanitizeColumnValue, sanitizeNumber, validateBatchFileSize, FILE_SIZE_LIMITS } from '../../lib/sanitize';
+import { generateUniqueFilename } from '../../lib/fileNameUtils';
 
 type ExcelOperation = 'excel-merge' | 'excel-split' | 'excel-compress' | 'excel-to-pdf' | 'excel-to-csv' | 'excel-remove-sheets' | 'excel-protect' | 'excel-sort' | 'excel-filter';
 
@@ -49,6 +51,9 @@ const ExcelToolsPage: React.FC = () => {
   const [filterColumnIndex, setFilterColumnIndex] = useState<number>(1);
   const [filterValue, setFilterValue] = useState<string>('');
   
+  // Track downloaded filenames to prevent duplicates
+  const downloadedFilenames = useRef<string[]>([]);
+  
   const inputRef = useRef<HTMLInputElement | null>(null);
   const colors = styling.colors;
 
@@ -70,6 +75,19 @@ const ExcelToolsPage: React.FC = () => {
       setError('All files must be Excel files (.xlsx, .xls).');
       return;
     }
+    
+    // Validate file sizes
+    const sizeValidation = validateBatchFileSize(
+      arr, 
+      FILE_SIZE_LIMITS.EXCEL * arr.length, 
+      FILE_SIZE_LIMITS.EXCEL, 
+      'Excel'
+    );
+    if (!sizeValidation.valid) {
+      setError(sizeValidation.error || 'File size validation failed.');
+      return;
+    }
+    
     setError(null);
     setResultUrl(null);
     setFiles(prev => ([...prev, ...arr.map(f => ({ id: crypto.randomUUID(), file: f }))]));
@@ -217,7 +235,12 @@ const ExcelToolsPage: React.FC = () => {
             setError('Please enter a password.');
             return;
           }
-          const blob = await protectExcelFile(fileList[0], excelPassword);
+          const sanitizedPassword = sanitizePassword(excelPassword);
+          if (sanitizedPassword.length < 4) {
+            setError('Password must be at least 4 characters.');
+            return;
+          }
+          const blob = await protectExcelFile(fileList[0], sanitizedPassword);
           url = URL.createObjectURL(blob);
           break;
         }
@@ -226,7 +249,8 @@ const ExcelToolsPage: React.FC = () => {
             setError('Please select exactly one Excel file.');
             return;
           }
-          const blob = await sortExcelByColumn(fileList[0], selectedSheetIndex, sortColumnIndex, sortAscending);
+          const sanitizedColumnIndex = sanitizeNumber(sortColumnIndex, 1, 1000, 1);
+          const blob = await sortExcelByColumn(fileList[0], selectedSheetIndex, sanitizedColumnIndex, sortAscending);
           url = URL.createObjectURL(blob);
           break;
         }
@@ -239,7 +263,9 @@ const ExcelToolsPage: React.FC = () => {
             setError('Please enter a filter value.');
             return;
           }
-          const blob = await filterExcelByColumn(fileList[0], selectedSheetIndex, filterColumnIndex, filterValue);
+          const sanitizedFilterValue = sanitizeColumnValue(filterValue);
+          const sanitizedColumnIndex = sanitizeNumber(filterColumnIndex, 1, 1000, 1);
+          const blob = await filterExcelByColumn(fileList[0], selectedSheetIndex, sanitizedColumnIndex, sanitizedFilterValue);
           url = URL.createObjectURL(blob);
           break;
         }
@@ -635,18 +661,23 @@ const ExcelToolsPage: React.FC = () => {
             {resultUrl && (
               <a
                 href={resultUrl}
-                download={
-                  operation === 'excel-merge' ? 'merged.xlsx' :
-                  operation === 'excel-split' ? 'split-sheets.zip' :
-                  operation === 'excel-compress' ? `compressed-${compressionLevel}.xlsx` :
-                  operation === 'excel-to-pdf' ? 'converted.pdf' :
-                  operation === 'excel-to-csv' ? 'exported.csv' :
-                  operation === 'excel-remove-sheets' ? 'sheets-removed.xlsx' :
-                  operation === 'excel-protect' ? 'protected.xlsx' :
-                  operation === 'excel-sort' ? 'sorted.xlsx' :
-                  operation === 'excel-filter' ? 'filtered.xlsx' :
-                  'output.xlsx'
-                }
+                download={(() => {
+                  const baseFilename = 
+                    operation === 'excel-merge' ? 'merged.xlsx' :
+                    operation === 'excel-split' ? 'split-sheets.zip' :
+                    operation === 'excel-compress' ? `compressed-${compressionLevel}.xlsx` :
+                    operation === 'excel-to-pdf' ? 'converted.pdf' :
+                    operation === 'excel-to-csv' ? 'exported.csv' :
+                    operation === 'excel-remove-sheets' ? 'sheets-removed.xlsx' :
+                    operation === 'excel-protect' ? 'protected.xlsx' :
+                    operation === 'excel-sort' ? 'sorted.xlsx' :
+                    operation === 'excel-filter' ? 'filtered.xlsx' :
+                    'output.xlsx';
+                  
+                  const uniqueFilename = generateUniqueFilename(baseFilename, downloadedFilenames.current);
+                  downloadedFilenames.current.push(uniqueFilename);
+                  return uniqueFilename;
+                })()}
                 className={`px-4 py-2 flex items-center gap-2 ${styles.primaryBtn}`}
               >
                 <Download size={16} /> Download

@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styling from '../../../styling.json';
 import { Upload, Image as ImageIcon, X, ArrowUp, ArrowDown, Wand2, Crop, Paintbrush, Download, AlertCircle, Palette, FileText } from 'lucide-react';
 import styles from './pdfTools.module.css';
+import { sanitizeText, sanitizeNumber, validateBatchFileSize, FILE_SIZE_LIMITS } from '../../lib/sanitize';
+import { generateUniqueFilename } from '../../lib/fileNameUtils';
 
 type Operation = 'resize' | 'convert' | 'compress' | 'ocr' | 'crop' | 'filter' | 'watermark' | 'thumbnail';
 
@@ -52,6 +54,9 @@ const ImageToolsPage: React.FC = () => {
   const [thumbnailWidth, setThumbnailWidth] = useState<number>(200);
   const [thumbnailHeight, setThumbnailHeight] = useState<number>(200);
   
+  // Track downloaded filenames to prevent duplicates
+  const downloadedFilenames = useRef<string[]>([]);
+  
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const colors = styling.colors;
@@ -70,6 +75,19 @@ const ImageToolsPage: React.FC = () => {
       setError('All files must be images (png/jpg/jpeg/webp/gif).');
       return;
     }
+    
+    // Validate file sizes
+    const sizeValidation = validateBatchFileSize(
+      arr, 
+      FILE_SIZE_LIMITS.IMAGE_BATCH, 
+      FILE_SIZE_LIMITS.IMAGE, 
+      'image'
+    );
+    if (!sizeValidation.valid) {
+      setError(sizeValidation.error || 'File size validation failed.');
+      return;
+    }
+    
     setError(null);
     setResultUrls([]);
     
@@ -156,8 +174,8 @@ const ImageToolsPage: React.FC = () => {
       const ctx = canvas.getContext('2d');
 
       img.onload = () => {
-        let width = resizeWidth;
-        let height = resizeHeight;
+        let width = sanitizeNumber(resizeWidth, 1, 10000, 800);
+        let height = sanitizeNumber(resizeHeight, 1, 10000, 600);
 
         if (maintainAspect) {
           const aspectRatio = img.width / img.height;
@@ -221,13 +239,14 @@ const ImageToolsPage: React.FC = () => {
         canvas.height = img.height;
         ctx?.drawImage(img, 0, 0);
 
+        const sanitizedQuality = Math.max(1, Math.min(100, compressQuality)) / 100;
         canvas.toBlob(
           (blob) => {
             if (blob) resolve(blob);
             else reject(new Error('Failed to create blob'));
           },
           file.type,
-          compressQuality / 100
+          sanitizedQuality
         );
       };
 
@@ -259,9 +278,14 @@ const ImageToolsPage: React.FC = () => {
       const ctx = canvas.getContext('2d');
 
       img.onload = () => {
-        canvas.width = cropWidth;
-        canvas.height = cropHeight;
-        ctx?.drawImage(img, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+        const sanitizedX = sanitizeNumber(cropX, 0, img.width, 0);
+        const sanitizedY = sanitizeNumber(cropY, 0, img.height, 0);
+        const sanitizedWidth = sanitizeNumber(cropWidth, 1, img.width - sanitizedX, 400);
+        const sanitizedHeight = sanitizeNumber(cropHeight, 1, img.height - sanitizedY, 400);
+        
+        canvas.width = sanitizedWidth;
+        canvas.height = sanitizedHeight;
+        ctx?.drawImage(img, sanitizedX, sanitizedY, sanitizedWidth, sanitizedHeight, 0, 0, sanitizedWidth, sanitizedHeight);
 
         canvas.toBlob((blob) => {
           if (blob) resolve(blob);
@@ -352,13 +376,16 @@ const ImageToolsPage: React.FC = () => {
         canvas.height = img.height;
         ctx?.drawImage(img, 0, 0);
 
-        ctx!.font = `${watermarkFontSize}px Arial`;
+        const sanitizedText = sanitizeText(watermarkText, 200);
+        const sanitizedFontSize = sanitizeNumber(watermarkFontSize, 8, 200, 24);
+        
+        ctx!.font = `${sanitizedFontSize}px Arial`;
         ctx!.fillStyle = 'rgba(255, 255, 255, 0.7)';
         
         // Calculate position based on selected position
-        let x = watermarkX;
-        let y = watermarkY;
-        const textWidth = ctx!.measureText(watermarkText).width;
+        let x = sanitizeNumber(watermarkX, 0, canvas.width, 10);
+        let y = sanitizeNumber(watermarkY, 0, canvas.height, 10);
+        const textWidth = ctx!.measureText(sanitizedText).width;
         
         switch (watermarkPosition) {
           case 'top-left':
@@ -383,7 +410,7 @@ const ImageToolsPage: React.FC = () => {
             break;
         }
         
-        ctx!.fillText(watermarkText, x, y);
+        ctx!.fillText(sanitizedText, x, y);
 
         canvas.toBlob((blob) => {
           if (blob) resolve(blob);
@@ -403,15 +430,17 @@ const ImageToolsPage: React.FC = () => {
       const ctx = canvas.getContext('2d');
 
       img.onload = () => {
+        const sanitizedThumbWidth = sanitizeNumber(thumbnailWidth, 10, 2000, 200);
+        const sanitizedThumbHeight = sanitizeNumber(thumbnailHeight, 10, 2000, 200);
         const aspectRatio = img.width / img.height;
-        let width = thumbnailWidth;
-        let height = thumbnailHeight;
+        let width = sanitizedThumbWidth;
+        let height = sanitizedThumbHeight;
 
         // Maintain aspect ratio
-        if (img.width / thumbnailWidth > img.height / thumbnailHeight) {
-          height = thumbnailWidth / aspectRatio;
+        if (img.width / sanitizedThumbWidth > img.height / sanitizedThumbHeight) {
+          height = sanitizedThumbWidth / aspectRatio;
         } else {
-          width = thumbnailHeight * aspectRatio;
+          width = sanitizedThumbHeight * aspectRatio;
         }
 
         canvas.width = width;
@@ -500,6 +529,10 @@ const ImageToolsPage: React.FC = () => {
               break;
               
             case 'watermark':
+              const sanitizedWatermark = sanitizeText(watermarkText, 200);
+              if (!sanitizedWatermark) {
+                throw new Error('Please enter valid watermark text.');
+              }
               blob = await processWatermark(localFile.file);
               results.push({
                 name: `${nameWithoutExt}_watermarked.${localFile.file.type.split('/')[1]}`,
@@ -540,27 +573,38 @@ const ImageToolsPage: React.FC = () => {
 
   const downloadAll = async () => {
     if (resultUrls.length === 1) {
-      // Single file - direct download
+      // Single file - direct download with unique filename
+      const uniqueFilename = generateUniqueFilename(resultUrls[0].name, downloadedFilenames.current);
+      downloadedFilenames.current.push(uniqueFilename);
+      
       const link = document.createElement('a');
       link.href = resultUrls[0].url;
-      link.download = resultUrls[0].name;
+      link.download = uniqueFilename;
       link.click();
     } else {
-      // Multiple files - create ZIP
+      // Multiple files - create ZIP with unique filename
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
       
+      // Use unique names inside ZIP too
+      const zipFilenames: string[] = [];
       for (const result of resultUrls) {
         const response = await fetch(result.url);
         const blob = await response.blob();
-        zip.file(result.name, blob);
+        const uniqueName = generateUniqueFilename(result.name, zipFilenames);
+        zipFilenames.push(uniqueName);
+        zip.file(uniqueName, blob);
       }
       
       const zipBlob = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(zipBlob);
+      
+      const uniqueZipName = generateUniqueFilename('processed-images.zip', downloadedFilenames.current);
+      downloadedFilenames.current.push(uniqueZipName);
+      
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'processed-images.zip';
+      link.download = uniqueZipName;
       link.click();
       URL.revokeObjectURL(url);
     }
