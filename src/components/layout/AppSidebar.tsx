@@ -6,6 +6,7 @@ import {
   BookCopy,
   FileSpreadsheet,
   Presentation,
+  FileSignature,
 } from 'lucide-react';
 
 interface NavigationItem {  
@@ -29,6 +30,11 @@ const navigationItems: NavigationItem[] = [
     title: 'PDF Tools',
     icon: BookCopy,
     page: 'tools',
+  },
+  {
+    title: 'Digital Signature',
+    icon: FileSignature,
+    page: 'digitalsignature',
   },
   {
     title: 'Excel Tools',
