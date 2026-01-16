@@ -554,6 +554,87 @@ export async function filterExcelByColumn(
   });
 }
 
+// Convert PDF to Excel
+export async function convertPdfToExcel(file: File): Promise<Blob> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdfjsLib = await import('pdfjs-dist');
+  
+  // Disable worker to avoid Promise.withResolvers issue in Electron
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  (pdfjsLib as any).GlobalWorkerOptions.workerPort = null;
+  
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  const pdfDoc = await loadingTask.promise;
+  
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('PDF Content');
+  
+  let currentRow = 1;
+  
+  for (let i = 1; i <= pdfDoc.numPages; i++) {
+    const page = await pdfDoc.getPage(i);
+    const textContent = await page.getTextContent();
+    
+    // Add page header
+    worksheet.getCell(`A${currentRow}`).value = `Page ${i}`;
+    worksheet.getCell(`A${currentRow}`).font = { bold: true, size: 14 };
+    currentRow++;
+    
+    // Extract text items
+    const textItems = textContent.items as any[];
+    textItems.forEach((item: any) => {
+      if (item.str && item.str.trim()) {
+        worksheet.getCell(`A${currentRow}`).value = item.str.trim();
+        currentRow++;
+      }
+    });
+    
+    // Add spacing between pages
+    currentRow += 2;
+  }
+  
+  // Auto-fit column width
+  worksheet.getColumn(1).width = 80;
+  
+  const buffer = await workbook.xlsx.writeBuffer();
+  return new Blob([buffer], { 
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+  });
+}
+
+// Convert Word to Excel
+export async function convertWordToExcel(file: File): Promise<Blob> {
+  const arrayBuffer = await file.arrayBuffer();
+  
+  // Use mammoth to extract text from Word document
+  const mammoth = await import('mammoth');
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  const text = result.value;
+  
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Word Content');
+  
+  // Split text into lines
+  const lines = text.split('\n').filter(line => line.trim());
+  
+  // Add header
+  worksheet.getCell('A1').value = 'Content';
+  worksheet.getCell('A1').font = { bold: true, size: 12 };
+  
+  // Add content line by line
+  lines.forEach((line, index) => {
+    worksheet.getCell(`A${index + 2}`).value = line.trim();
+  });
+  
+  // Auto-fit column width
+  worksheet.getColumn(1).width = 80;
+  
+  const buffer = await workbook.xlsx.writeBuffer();
+  return new Blob([buffer], { 
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+  });
+}
+
 // Get compression level information
 export function getCompressionInfo(level: CompressionLevel): {
   name: string;

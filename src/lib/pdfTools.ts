@@ -493,7 +493,9 @@ export function formatFileSize(bytes: number): string {
 // Convert PDF to images (extract pages as images)
 export async function convertPdfToImages(file: File): Promise<Array<{ pageNumber: number; blob: Blob; dataUrl: string }>> {
   const pdfjsLib = await import('pdfjs-dist');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  // Disable worker to avoid Promise.withResolvers issue
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  (pdfjsLib as any).GlobalWorkerOptions.workerPort = null;
   
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -671,7 +673,9 @@ export async function convertPdfToWord(file: File): Promise<Blob> {
   } else {
     // Browser environment
     pdfjsLib = await import('pdfjs-dist');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+    // Disable worker to avoid Promise.withResolvers issue
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    (pdfjsLib as any).GlobalWorkerOptions.workerPort = null;
   }
   
   const { Document, Paragraph, TextRun, Packer } = await import('docx');

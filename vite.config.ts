@@ -18,5 +18,11 @@ export default defineConfig({
         main: path.resolve(__dirname, 'index.html')
       }
     }
+  },
+  optimizeDeps: {
+    exclude: ['pdfjs-dist']
+  },
+  worker: {
+    format: 'es'
   }
 })

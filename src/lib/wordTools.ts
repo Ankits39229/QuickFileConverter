@@ -694,3 +694,110 @@ export async function getWordStats(file: File): Promise<{
     throw new Error(`Failed to get statistics: ${err.message}`);
   }
 }
+
+// Convert Excel to Word
+export async function convertExcelToWord(file: File): Promise<Blob> {
+  try {
+    const ExcelJS = await import('exceljs');
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(arrayBuffer);
+    
+    const sections: any[] = [];
+    
+    // Process each worksheet
+    workbook.eachSheet((worksheet, sheetIndex) => {
+      const paragraphs: any[] = [];
+      
+      // Add sheet name as heading
+      paragraphs.push(
+        new Paragraph({
+          children: [new TextRun({ 
+            text: worksheet.name, 
+            bold: true,
+            size: 32,
+            color: "2E74B5"
+          })],
+          heading: HeadingLevel.HEADING_1,
+          spacing: {
+            before: sheetIndex > 0 ? 480 : 240,
+            after: 240
+          }
+        })
+      );
+      
+      // Convert worksheet to text table
+      let tableData: string[][] = [];
+      
+      worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+        const rowData: string[] = [];
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          let value = '';
+          if (cell.value !== null && cell.value !== undefined) {
+            if (typeof cell.value === 'object') {
+              if ('result' in cell.value) {
+                value = (cell.value as any).result?.toString() || '';
+              } else if ('text' in cell.value) {
+                value = (cell.value as any).text;
+              } else if (cell.value instanceof Date) {
+                value = cell.value.toISOString().split('T')[0];
+              } else {
+                value = JSON.stringify(cell.value);
+              }
+            } else {
+              value = cell.value.toString();
+            }
+          }
+          rowData.push(value);
+        });
+        tableData.push(rowData);
+      });
+      
+      // Create text representation of table
+      tableData.forEach((row, rowIndex) => {
+        const rowText = row.join(' | ');
+        paragraphs.push(
+          new Paragraph({
+            children: [new TextRun({ 
+              text: rowText,
+              font: 'Courier New',
+              size: 20
+            })],
+            spacing: {
+              after: 120
+            }
+          })
+        );
+        
+        // Add separator after header row
+        if (rowIndex === 0 && tableData.length > 1) {
+          paragraphs.push(
+            new Paragraph({
+              children: [new TextRun({ 
+                text: '-'.repeat(80),
+                color: "CCCCCC"
+              })],
+              spacing: {
+                after: 120
+              }
+            })
+          );
+        }
+      });
+      
+      sections.push({
+        children: paragraphs
+      });
+    });
+    
+    // Create document
+    const doc = new Document({
+      sections: sections
+    });
+    
+    const blob = await Packer.toBlob(doc);
+    return blob;
+  } catch (err: any) {
+    throw new Error(`Failed to convert Excel to Word: ${err.message}`);
+  }
+}

@@ -105,7 +105,9 @@ export async function convertPdfToSearchable(
   onProgress?: OCRProgressCallback
 ): Promise<Blob> {
   const pdfjsLib = await import('pdfjs-dist');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  // Disable worker to avoid Promise.withResolvers issue
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  (pdfjsLib as any).GlobalWorkerOptions.workerPort = null;
   
   const arrayBuffer = await pdfFile.arrayBuffer();
   const loadedPdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;

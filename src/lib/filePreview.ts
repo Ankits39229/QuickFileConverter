@@ -4,9 +4,10 @@
 
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Set up PDF.js worker
+// Set up PDF.js worker - disable to avoid Promise.withResolvers issue
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  (pdfjsLib as any).GlobalWorkerOptions.workerPort = null;
 }
 
 export interface FilePreview {
@@ -35,9 +36,10 @@ export async function generatePdfPreview(file: File): Promise<FilePreview> {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   
+  const metadataInfo = await pdf.getMetadata();
   const metadata: Record<string, any> = {
     pages: pdf.numPages,
-    pdfVersion: `PDF ${(await pdf.getMetadata()).info?.PDFFormatVersion || 'Unknown'}`,
+    pdfVersion: `PDF ${(metadataInfo.info as any)?.PDFFormatVersion || 'Unknown'}`,
   };
 
   // Generate thumbnail from first page
