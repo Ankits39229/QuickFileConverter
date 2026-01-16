@@ -306,6 +306,32 @@ const DigitalSignature: React.FC<DigitalSignatureProps> = () => {
         <p className={styles.sub}>Sign and verify PDF documents digitally. Files processed securely.</p>
       </header>
 
+      {/* Beta/Development Notice */}
+      <div className="p-4 bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-lg shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0">
+            <div className="flex items-center justify-center w-8 h-8 bg-amber-500 text-white rounded-full font-bold text-sm">
+              β
+            </div>
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-bold text-amber-900">Beta Feature - Under Development</h3>
+              <span className="px-2 py-0.5 bg-amber-500 text-white text-xs font-semibold rounded-full">DEMO MODE</span>
+            </div>
+            <p className="text-sm text-amber-800 mb-2">
+              This feature is fully functional for testing and demonstration purposes. All UI workflows, form validations, 
+              and user interactions are production-ready.
+            </p>
+            <div className="text-xs text-amber-700 space-y-1">
+              <p><strong>✓ Working:</strong> Complete UI/UX, file upload, form validation, processing animations</p>
+              <p><strong>⚠ Demo Mode:</strong> Actual PDF signing uses simulated cryptographic operations</p>
+              <p><strong>📝 Next Step:</strong> API integration required for production-grade digital signatures (see documentation)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {!operation && (
         <section className="grid md:grid-cols-2 gap-6">
           <button

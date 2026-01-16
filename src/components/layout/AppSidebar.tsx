@@ -137,6 +137,20 @@ export function AppSidebar({ currentPage, onPageChange }: AppSidebarProps) {
                     }}
                   >
                     {item.title}
+                    {item.page === 'digitalsignature' && (
+                      <span style={{
+                        marginLeft: '6px',
+                        padding: '1px 5px',
+                        backgroundColor: '#f59e0b',
+                        color: 'white',
+                        fontSize: '9px',
+                        fontWeight: 'bold',
+                        borderRadius: '3px',
+                        verticalAlign: 'middle'
+                      }}>
+                        BETA
+                      </span>
+                    )}
                   </span>
                   
                   {/* Tooltip for collapsed state */}

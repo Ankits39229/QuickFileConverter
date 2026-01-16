@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styling from '../../../styling.json';
-import { Upload, File as FileIcon, X, ArrowUp, ArrowDown, Wand2, Images, FileSymlink, Download, AlertCircle, Scissors, RotateCw, Trash2, Hash, Droplet, FileType2, Undo2, Redo2, Eye } from 'lucide-react';
+import { Upload, File as FileIcon, X, ArrowUp, ArrowDown, Wand2, Images, FileSymlink, Download, AlertCircle, Scissors, RotateCw, Trash2, Hash, Droplet, FileType2, Undo2, Redo2, Eye, FileText } from 'lucide-react';
 import styles from './pdfTools.module.css';
 import { FilePreviewModal } from '../ui/FilePreviewModal';
 import { generateFilePreview, FilePreview } from '../../lib/filePreview';
