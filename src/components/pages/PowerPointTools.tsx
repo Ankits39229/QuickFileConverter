@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styling from '../../../styling.json';
-import { Upload, File as FileIcon, X, ArrowUp, ArrowDown, FileDown, Scissors, Lock, Unlock, Droplet, Image as ImageIcon, Wrench, Layers, ArrowDownToLine } from 'lucide-react';
+import { Upload, File as FileIcon, X, ArrowUp, ArrowDown, FileDown, Scissors, Lock, Unlock, Droplet, Image as ImageIcon, Wrench, Layers, ArrowDownToLine, AlertCircle } from 'lucide-react';
 import styles from './pdfTools.module.css';
 import { 
   convertPptToPdf,
@@ -403,11 +403,13 @@ const PowerPointToolsPage: React.FC = () => {
               onClick={() => { setOperation(card.key as PptOperation); clearAll(); }}
               className={`text-left p-5 flex flex-col gap-3 ${styles.operationCard}`}
             >
-              <span className="flex items-center gap-2">
+              <div className={`w-10 h-10 flex items-center justify-center ${styles.operationCardIcon}`}>
                 {card.icon}
-                <span className={styles.itemTitle}>{card.title}</span>
-              </span>
-              <p className={styles.itemDesc}>{card.desc}</p>
+              </div>
+              <div>
+                <h3 className={`mb-1 ${styles.operationCardTitle}`}>{card.title}</h3>
+                <p className={`leading-snug ${styles.operationCardDesc}`}>{card.desc}</p>
+              </div>
             </button>
           ))}
         </section>
@@ -417,23 +419,30 @@ const PowerPointToolsPage: React.FC = () => {
         <section className="space-y-6">
           <button
             onClick={() => { setOperation(null); clearAll(); }}
-            className={styles.backButton}
+            className={styles.modeBtn}
           >
             ← Back to Operations
           </button>
 
-          <div className={styles.uploadArea}
+          <div
             onClick={() => inputRef.current?.click()}
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
             onDrop={(e) => { e.preventDefault(); e.stopPropagation(); onFiles(e.dataTransfer.files); }}
+            className={`group relative text-center hover:shadow-md ${styles.dropZone}`}
           >
-            <Upload size={40} strokeWidth={1.5} />
-            <p className="text-base font-medium">Click or drag {operation === 'image-to-ppt' ? 'images' : 'PowerPoint files'} here</p>
-            <p className="text-sm opacity-75">
-              {operation === 'image-to-ppt' 
-                ? 'JPG, PNG, GIF, BMP, or WebP' 
-                : 'PPTX or PPT files (max 100MB each)'}
-            </p>
+            <div className="flex flex-col items-center gap-3">
+              <div className={styles.dropIconWrap}>
+                <Upload size={28} />
+              </div>
+              <p className="text-sm">
+                <strong>Click to choose</strong> or drag & drop {operation === 'image-to-ppt' ? 'images' : 'PowerPoint files'} here
+              </p>
+              <span className={styles.smallNote}>
+                {operation === 'image-to-ppt' 
+                  ? 'Accepted: JPG, PNG, GIF, BMP, WebP' 
+                  : 'Accepted: PPTX, PPT files (max 100MB each)'}
+              </span>
+            </div>
           </div>
 
           <input
@@ -599,8 +608,9 @@ const PowerPointToolsPage: React.FC = () => {
           )}
 
           {error && (
-            <div className={styles.errorBox}>
-              <p>{error}</p>
+            <div className={`p-3 rounded-md flex items-start gap-2 text-sm ${styles.errorBox}`}>
+              <AlertCircle size={16} className="shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 
@@ -608,7 +618,7 @@ const PowerPointToolsPage: React.FC = () => {
             <button
               onClick={handleProcess}
               disabled={processing}
-              className={styles.processButton}
+              className={`px-6 py-3 w-full disabled:opacity-50 ${styles.primaryBtn}`}
             >
               {processing ? 'Processing...' : 'Process & Download'}
             </button>

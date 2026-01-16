@@ -450,3 +450,145 @@
   background: var(--pdf-bg-button-hover);
   transform: scale(1.05);
 }
+
+/* Back Button */
+.backButton {
+  background: var(--pdf-bg-transparent);
+  border: var(--pdf-button-border-width) solid var(--pdf-border-primary);
+  padding: 0.5rem 1rem;
+  border-radius: var(--pdf-button-border-radius);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: var(--pdf-transition-colors);
+  font-size: var(--pdf-button-font-size);
+  font-weight: var(--pdf-button-font-weight);
+  font-family: var(--pdf-font);
+  color: var(--pdf-text-primary);
+  cursor: pointer;
+}
+
+.backButton:hover {
+  background: var(--pdf-bg-button-hover);
+}
+
+.backButton:active {
+  background: var(--pdf-bg-button);
+  transform: translateY(1px);
+}
+
+/* Upload Area */
+.uploadArea {
+  border: 2px dashed var(--pdf-border-primary);
+  background: var(--pdf-bg-item);
+  cursor: pointer;
+  padding: 3rem 2rem;
+  border-radius: var(--pdf-item-border-radius);
+  transition: var(--pdf-transition-all);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.uploadArea:hover {
+  background: var(--pdf-bg-hover);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Process Button */
+.processButton {
+  width: 100%;
+  background: var(--pdf-bg-button);
+  border: var(--pdf-button-border-width) solid var(--pdf-border-primary);
+  border-radius: var(--pdf-button-border-radius);
+  font-size: var(--pdf-button-font-size);
+  font-weight: var(--pdf-button-font-weight);
+  font-family: var(--pdf-font);
+  color: var(--pdf-text-primary);
+  height: var(--pdf-button-height);
+  min-height: var(--pdf-button-height);
+  transition: var(--pdf-transition-colors);
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+}
+
+.processButton:hover:not(:disabled) {
+  background: var(--pdf-bg-button-hover);
+}
+
+.processButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.processButton:active:not(:disabled) {
+  background: var(--pdf-bg-button);
+  transform: translateY(1px);
+}
+
+/* Input Fields */
+.input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: var(--pdf-button-border-width) solid var(--pdf-border-primary);
+  border-radius: var(--pdf-button-border-radius);
+  background: #ffffff;
+  font-family: var(--pdf-font);
+  color: var(--pdf-text-primary);
+  font-size: 0.875rem;
+  transition: var(--pdf-transition-colors);
+}
+
+.input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(107, 144, 128, 0.3);
+  border-color: var(--pdf-border-primary);
+}
+
+.input::placeholder {
+  color: var(--pdf-text-primary);
+  opacity: 0.5;
+}
+
+/* Select Dropdown */
+.select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: var(--pdf-button-border-width) solid var(--pdf-border-primary);
+  border-radius: var(--pdf-button-border-radius);
+  background: #ffffff;
+  font-family: var(--pdf-font);
+  color: var(--pdf-text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: var(--pdf-transition-colors);
+}
+
+.select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(107, 144, 128, 0.3);
+  border-color: var(--pdf-border-primary);
+}
+
+.select:hover {
+  background: var(--pdf-bg-item);
+}
+
+/* Item Title & Description (for operation cards) */
+.itemTitle {
+  font-size: var(--pdf-item-title-size);
+  font-weight: var(--pdf-item-title-weight);
+  font-family: var(--pdf-font);
+  color: var(--pdf-text-primary);
+  margin-bottom: var(--pdf-item-title-margin);
+}
+
+.itemDesc {
+  font-size: var(--pdf-item-desc-size);
+  font-weight: var(--pdf-item-desc-weight);
+  font-family: var(--pdf-font);
+  color: var(--pdf-text-primary);
+  opacity: var(--pdf-text-opacity);
+}
