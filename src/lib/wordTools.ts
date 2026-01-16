@@ -374,10 +374,10 @@ export async function addHeadersToWord(file: File, headerText: string): Promise<
   }
 }
 
-// Word to PDF conversion with better formatting
+// Word to PDF conversion with better formatting preservation
 export async function convertWordToPdfEnhanced(file: File): Promise<Blob> {
   try {
-    // Extract text with mammoth (better formatting)
+    // Extract text with mammoth with enhanced styling
     const arrayBuffer = await file.arrayBuffer();
     
     // mammoth expects Buffer in Node.js or ArrayBuffer in browser
@@ -390,7 +390,18 @@ export async function convertWordToPdfEnhanced(file: File): Promise<Blob> {
       mammothInput = { arrayBuffer };
     }
     
-    const result = await mammoth.convertToHtml(mammothInput);
+    // Enhanced style mapping for better formatting preservation
+    const result = await mammoth.convertToHtml({
+      ...mammothInput,
+      styleMap: [
+        "p[style-name='Heading 1'] => h1:fresh",
+        "p[style-name='Heading 2'] => h2:fresh",
+        "p[style-name='Heading 3'] => h3:fresh",
+        "p[style-name='Title'] => h1.title:fresh",
+        "r[style-name='Strong'] => strong",
+        "p[style-name='Quote'] => blockquote",
+      ]
+    });
     const htmlContent = result.value;
     
     // Parse HTML - browser has DOMParser, Node.js doesn't
@@ -417,11 +428,13 @@ export async function convertWordToPdfEnhanced(file: File): Promise<Blob> {
       })) as any;
     }
     
-    // Create PDF
+    // Create PDF with better font support
     const pdfDoc = await PDFDocument.create();
     const timesRomanFont = await pdfDoc.embedFont(StandardFonts.TimesRoman);
     const timesRomanBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
     const timesRomanItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
+    const timesRomanBoldItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanBoldItalic);
+    const courierFont = await pdfDoc.embedFont(StandardFonts.Courier);
     
     const margin = 72; // 1 inch
     const pageWidth = 595; // A4 width in points
@@ -430,6 +443,129 @@ export async function convertWordToPdfEnhanced(file: File): Promise<Blob> {
     
     let page = pdfDoc.addPage([pageWidth, pageHeight]);
     let yPosition = pageHeight - margin;
+    
+    // Helper function to check if element has specific child tag
+    const hasChildTag = (element: any, tagName: string): boolean => {
+      if (element.querySelector) {
+        return element.querySelector(tagName) !== null;
+      }
+      return false;
+    };
+    
+    // Helper function to process text with inline formatting
+    const processTextWithFormatting = (element: any, baseFontSize: number, baseFont: any): void => {
+      if (!element.childNodes || element.childNodes.length === 0) {
+        // No child nodes, process as plain text
+        const text = element.textContent || '';
+        if (text.trim()) {
+          drawTextWithWrapping(text, baseFontSize, baseFont);
+        }
+        return;
+      }
+      
+      // Process child nodes with their formatting
+      const fragments: Array<{text: string, font: any}> = [];
+      
+      const processNode = (node: any): void => {
+        if (node.nodeType === 3) { // Text node
+          const text = node.textContent || '';
+          if (text) {
+            fragments.push({ text, font: baseFont });
+          }
+        } else if (node.nodeType === 1) { // Element node
+          const tagName = node.tagName.toLowerCase();
+          const text = node.textContent || '';
+          if (!text) return;
+          
+          let nodeFont = baseFont;
+          if (tagName === 'strong' || tagName === 'b') {
+            nodeFont = baseFontSize >= 16 ? timesRomanBold : 
+                      (baseFont === timesRomanItalic ? timesRomanBoldItalic : timesRomanBold);
+          } else if (tagName === 'em' || tagName === 'i') {
+            nodeFont = baseFont === timesRomanBold ? timesRomanBoldItalic : timesRomanItalic;
+          } else if (tagName === 'code') {
+            nodeFont = courierFont;
+          }
+          
+          fragments.push({ text, font: nodeFont });
+        }
+      };
+      
+      element.childNodes.forEach((node: any) => processNode(node));
+      
+      // Now draw fragments with word wrapping
+      let currentLine = '';
+      let currentLineFragments: Array<{text: string, font: any}> = [];
+      
+      for (const fragment of fragments) {
+        const words = fragment.text.split(' ');
+        
+        for (let i = 0; i < words.length; i++) {
+          const word = words[i];
+          const testLine = currentLine + (currentLine ? ' ' : '') + word;
+          const testWidth = fragment.font.widthOfTextAtSize(testLine, baseFontSize);
+          
+          if (testWidth > maxWidth && currentLine) {
+            // Draw current line
+            drawLine(currentLine, baseFontSize, fragment.font);
+            currentLine = word;
+            currentLineFragments = [{ text: word, font: fragment.font }];
+          } else {
+            currentLine = testLine;
+            if (currentLineFragments.length === 0 || currentLineFragments[currentLineFragments.length - 1].font !== fragment.font) {
+              currentLineFragments.push({ text: word, font: fragment.font });
+            }
+          }
+        }
+      }
+      
+      // Draw remaining line
+      if (currentLine) {
+        const font = fragments.length > 0 ? fragments[0].font : baseFont;
+        drawLine(currentLine, baseFontSize, font);
+      }
+    };
+    
+    const drawLine = (text: string, fontSize: number, font: any): void => {
+      const lineHeight = fontSize * 1.3;
+      
+      if (yPosition < margin) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        yPosition = pageHeight - margin;
+      }
+      
+      page.drawText(text, {
+        x: margin,
+        y: yPosition,
+        size: fontSize,
+        font: font,
+        color: rgb(0, 0, 0)
+      });
+      
+      yPosition -= lineHeight;
+    };
+    
+    const drawTextWithWrapping = (text: string, fontSize: number, font: any): void => {
+      const lineHeight = fontSize * 1.3;
+      const words = text.split(' ');
+      let currentLine = '';
+      
+      for (const word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const width = font.widthOfTextAtSize(testLine, fontSize);
+        
+        if (width > maxWidth && currentLine) {
+          drawLine(currentLine, fontSize, font);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      
+      if (currentLine) {
+        drawLine(currentLine, fontSize, font);
+      }
+    };
     
     for (let i = 0; i < bodyElements.length; i++) {
       const element = bodyElements[i];
@@ -440,89 +576,64 @@ export async function convertWordToPdfEnhanced(file: File): Promise<Blob> {
       
       let fontSize = 12;
       let font = timesRomanFont;
-      let lineSpacing = 1.2;
+      let lineSpacing = 1.3;
+      let paragraphSpacing = 0.3;
+      let indentation = 0;
       
       // Adjust for different elements
       if (tagName === 'h1') {
         fontSize = 24;
         font = timesRomanBold;
-        lineSpacing = 1.3;
+        paragraphSpacing = 0.8;
       } else if (tagName === 'h2') {
         fontSize = 20;
         font = timesRomanBold;
-        lineSpacing = 1.3;
+        paragraphSpacing = 0.6;
       } else if (tagName === 'h3') {
         fontSize = 16;
         font = timesRomanBold;
-        lineSpacing = 1.3;
-      } else if (element.querySelector('strong') || element.querySelector('b')) {
-        font = timesRomanBold;
-      } else if (element.querySelector('em') || element.querySelector('i')) {
+        paragraphSpacing = 0.5;
+      } else if (tagName === 'blockquote') {
+        fontSize = 11;
         font = timesRomanItalic;
+        indentation = 36; // 0.5 inch indent
+        paragraphSpacing = 0.4;
+      } else {
+        // Check for inline formatting
+        const hasBold = hasChildTag(element, 'strong') || hasChildTag(element, 'b');
+        const hasItalic = hasChildTag(element, 'em') || hasChildTag(element, 'i');
+        const hasCode = hasChildTag(element, 'code');
+        
+        if (hasCode) {
+          font = courierFont;
+          fontSize = 11;
+        } else if (hasBold && hasItalic) {
+          font = timesRomanBoldItalic;
+        } else if (hasBold) {
+          font = timesRomanBold;
+        } else if (hasItalic) {
+          font = timesRomanItalic;
+        }
       }
       
       const lineHeight = fontSize * lineSpacing;
       
+      // Add space before paragraph
+      if (i > 0) {
+        yPosition -= lineHeight * paragraphSpacing;
+      }
+      
       // Check if we need a new page
-      if (yPosition < margin + lineHeight) {
+      if (yPosition < margin + lineHeight * 2) {
         page = pdfDoc.addPage([pageWidth, pageHeight]);
         yPosition = pageHeight - margin;
       }
       
-      // Split text into lines
-      const words = text.split(' ');
-      let currentLine = '';
+      // Process text with proper formatting
+      processTextWithFormatting(element, fontSize, font);
       
-      for (const word of words) {
-        const testLine = currentLine ? `${currentLine} ${word}` : word;
-        const width = font.widthOfTextAtSize(testLine, fontSize);
-        
-        if (width > maxWidth && currentLine) {
-          // Draw current line
-          if (yPosition < margin) {
-            page = pdfDoc.addPage([pageWidth, pageHeight]);
-            yPosition = pageHeight - margin;
-          }
-          
-          page.drawText(currentLine, {
-            x: margin,
-            y: yPosition,
-            size: fontSize,
-            font: font,
-            color: rgb(0, 0, 0)
-          });
-          
-          yPosition -= lineHeight;
-          currentLine = word;
-        } else {
-          currentLine = testLine;
-        }
-      }
-      
-      // Draw remaining line
-      if (currentLine) {
-        if (yPosition < margin) {
-          page = pdfDoc.addPage([pageWidth, pageHeight]);
-          yPosition = pageHeight - margin;
-        }
-        
-        page.drawText(currentLine, {
-          x: margin,
-          y: yPosition,
-          size: fontSize,
-          font: font,
-          color: rgb(0, 0, 0)
-        });
-        
-        yPosition -= lineHeight;
-      }
-      
-      // Add extra space after headings and paragraphs
-      if (tagName.startsWith('h')) {
-        yPosition -= lineHeight * 0.5;
-      } else {
-        yPosition -= lineHeight * 0.3;
-      }
+      // Small extra spacing after paragraph
+      yPosition -= lineHeight * 0.1;
     }
     
     const pdfBytes = await pdfDoc.save();

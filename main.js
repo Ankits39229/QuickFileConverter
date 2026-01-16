@@ -5,6 +5,18 @@ const fs = require('fs');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 
+// Polyfill for Promise.withResolvers (needed for pdfjs-dist and older Electron/Chromium)
+if (!Promise.withResolvers) {
+  Promise.withResolvers = function() {
+    let resolve, reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
 // Disable hardware acceleration to prevent GPU-related errors
 app.disableHardwareAcceleration();
 
