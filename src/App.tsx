@@ -9,6 +9,7 @@ import HomePage from './components/pages/Home.tsx';
 import LogsPage from './components/pages/Logs.tsx';
 import ToolsPage from './components/pages/Tools.tsx';
 import ExcelToolsPage from './components/pages/ExcelTools.tsx';
+import PowerPointToolsPage from './components/pages/PowerPointTools.tsx';
 import HelpPage from './components/pages/Help.tsx';
 import ProcessesPage from './components/pages/ProcessesPage.tsx';
 
@@ -18,6 +19,7 @@ const pageComponents: Record<string, React.ComponentType> = {
   logs: LogsPage,
   tools: ToolsPage,
   exceltools: ExcelToolsPage,
+  powerpointtools: PowerPointToolsPage,
   help: HelpPage,
   processespage: ProcessesPage,
 };

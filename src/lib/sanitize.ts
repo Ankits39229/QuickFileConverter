@@ -7,6 +7,7 @@ export const FILE_SIZE_LIMITS = {
   PDF: 200 * 1024 * 1024,      // 200 MB
   EXCEL: 70 * 1024 * 1024,     // 70 MB
   WORD: 70 * 1024 * 1024,      // 70 MB
+  POWERPOINT: 100 * 1024 * 1024, // 100 MB
   IMAGE: 75 * 1024 * 1024,     // 75 MB per image
   IMAGE_BATCH: 400 * 1024 * 1024, // 400 MB total for batch
 } as const;

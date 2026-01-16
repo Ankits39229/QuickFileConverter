@@ -5,6 +5,7 @@ import {
   FileText,
   BookCopy,
   FileSpreadsheet,
+  Presentation,
 } from 'lucide-react';
 
 interface NavigationItem {  
@@ -33,6 +34,11 @@ const navigationItems: NavigationItem[] = [
     title: 'Excel Tools',
     icon: FileSpreadsheet,
     page: 'exceltools',
+  },
+  {
+    title: 'PowerPoint Tools',
+    icon: Presentation,
+    page: 'powerpointtools',
   },
   {
     title: 'Word Tools',
