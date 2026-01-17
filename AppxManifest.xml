@@ -6,7 +6,7 @@
 
   <Identity Name="Technican.QuickFileConverter"
             Publisher="CN=BAA8767D-4FEA-4F18-A470-55D2F92BCF77"
-            Version="3.0.0.0" />
+            Version="3.0.1.0" />
 
   <Properties>
     <DisplayName>Quick File Converter</DisplayName>

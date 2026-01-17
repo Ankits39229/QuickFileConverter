@@ -1,0 +1,19 @@
+Quick File Converter — Fast, offline PDF converter with OCR, Word/Excel/PPT conversion, and batch processing.
+
+Why this:
+- Converts PDF to Word, Excel, and Images; Word/Excel to PDF; Image to Searchable PDF (OCR).
+- Offline desktop app — privacy-first, no cloud upload required.
+
+Full Feature List:
+- PDF Converter: Merge, split, compress, rotate, extract pages, and convert PDF to Word/Excel/Images.
+- OCR Tools: Image → Searchable PDF, Scanned PDF → Searchable PDF, Extract Text.
+- Office Conversions: Word → PDF, Word → Excel, Excel → PDF/CSV, Excel → Word, PowerPoint → PDF.
+- Image Tools: Image → PDF, Image → PowerPoint, export page images from PDFs.
+- Quick Conversion Panel: Large drag & drop area, auto-detects file type, one-click conversions, and smart suggestions.
+- Batch & Bulk Processing: Queue multiple files, process in parallel, and download all results.
+- Digital Signature (Beta): Add/verify signatures.
+- Previews & Metadata: File thumbnails, page previews, file metadata, and page-level exports.
+- Performance & Privacy: Local processing for speed and confidentiality; suitable for offline environments.
+
+Suggested Store Keywords (comma-separated):
+PDF converter, OCR, PDF to Word, PDF to Excel, Word to PDF, Excel to PDF, image to PDF, batch converter, offline converter, desktop converter
