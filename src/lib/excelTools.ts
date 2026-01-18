@@ -557,11 +557,8 @@ export async function filterExcelByColumn(
 // Convert PDF to Excel
 export async function convertPdfToExcel(file: File): Promise<Blob> {
   const arrayBuffer = await file.arrayBuffer();
-  const pdfjsLib = await import('pdfjs-dist');
-  
-  // Disable worker to avoid Promise.withResolvers issue in Electron
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-  (pdfjsLib as any).GlobalWorkerOptions.workerPort = null;
+  const { getPdfLib } = await import('./pdfWorkerConfig');
+  const pdfjsLib = await getPdfLib();
   
   const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
   const pdfDoc = await loadingTask.promise;

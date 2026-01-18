@@ -6,7 +6,6 @@ import {
   BookCopy,
   FileSpreadsheet,
   Presentation,
-  FileSignature,
 } from 'lucide-react';
 
 interface NavigationItem {  
@@ -27,32 +26,27 @@ const navigationItems: NavigationItem[] = [
     page: 'home',
   },
   {
-    title: 'PDF Tools',
+    title: 'PDF',
     icon: BookCopy,
     page: 'tools',
   },
   {
-    title: 'Digital Signature',
-    icon: FileSignature,
-    page: 'digitalsignature',
-  },
-  {
-    title: 'Excel Tools',
+    title: 'Excel',
     icon: FileSpreadsheet,
     page: 'exceltools',
   },
   {
-    title: 'PowerPoint Tools',
+    title: 'PowerPoint',
     icon: Presentation,
     page: 'powerpointtools',
   },
   {
-    title: 'Word Tools',
+    title: 'Word',
     icon: FileText,
     page: 'logs',
   },
   {
-    title: 'Image Tools',
+    title: 'Image',
     icon: Image,
     page: 'processespage',
   },
@@ -137,20 +131,6 @@ export function AppSidebar({ currentPage, onPageChange }: AppSidebarProps) {
                     }}
                   >
                     {item.title}
-                    {item.page === 'digitalsignature' && (
-                      <span style={{
-                        marginLeft: '6px',
-                        padding: '1px 5px',
-                        backgroundColor: '#f59e0b',
-                        color: 'white',
-                        fontSize: '9px',
-                        fontWeight: 'bold',
-                        borderRadius: '3px',
-                        verticalAlign: 'middle'
-                      }}>
-                        BETA
-                      </span>
-                    )}
                   </span>
                   
                   {/* Tooltip for collapsed state */}

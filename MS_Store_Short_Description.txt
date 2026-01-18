@@ -11,7 +11,6 @@ Full Feature List:
 - Image Tools: Image → PDF, Image → PowerPoint, export page images from PDFs.
 - Quick Conversion Panel: Large drag & drop area, auto-detects file type, one-click conversions, and smart suggestions.
 - Batch & Bulk Processing: Queue multiple files, process in parallel, and download all results.
-- Digital Signature (Beta): Add/verify signatures.
 - Previews & Metadata: File thumbnails, page previews, file metadata, and page-level exports.
 - Performance & Privacy: Local processing for speed and confidentiality; suitable for offline environments.
 

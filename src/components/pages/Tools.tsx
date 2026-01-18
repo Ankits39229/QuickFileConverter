@@ -945,7 +945,7 @@ const ToolsPage: React.FC = () => {
               <h3 className="text-sm font-medium">Compression Level</h3>
               <div className="space-y-2">
                 {(['low', 'medium', 'high'] as CompressionLevel[]).map((level) => {
-                  const info = getPdfCompressionInfo(level);
+                  const info = getCompressionInfo(level);
                   return (
                     <label key={level} className="flex items-start gap-2">
                       <input

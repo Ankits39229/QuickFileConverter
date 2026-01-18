@@ -492,10 +492,8 @@ export function formatFileSize(bytes: number): string {
 
 // Convert PDF to images (extract pages as images)
 export async function convertPdfToImages(file: File): Promise<Array<{ pageNumber: number; blob: Blob; dataUrl: string }>> {
-  const pdfjsLib = await import('pdfjs-dist');
-  // Disable worker to avoid Promise.withResolvers issue
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-  (pdfjsLib as any).GlobalWorkerOptions.workerPort = null;
+  const { getPdfLib } = await import('./pdfWorkerConfig');
+  const pdfjsLib = await getPdfLib();
   
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -665,20 +663,10 @@ export async function addWatermarkToPdf(
 
 // Convert PDF to Word (extract text and create DOCX)
 export async function convertPdfToWord(file: File): Promise<Blob> {
-  // Use legacy build in Node.js as recommended
-  let pdfjsLib;
-  if (typeof window === 'undefined') {
-    // Node.js environment - use legacy build
-    pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  } else {
-    // Browser environment
-    pdfjsLib = await import('pdfjs-dist');
-    // Disable worker to avoid Promise.withResolvers issue
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-    (pdfjsLib as any).GlobalWorkerOptions.workerPort = null;
-  }
+  const { getPdfLib } = await import('./pdfWorkerConfig');
+  const pdfjsLib = await getPdfLib();
   
-  const { Document, Paragraph, TextRun, Packer } = await import('docx');
+  const { Document, Paragraph, TextRun, Packer, AlignmentType, HeadingLevel } = await import('docx');
   
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -688,33 +676,160 @@ export async function convertPdfToWord(file: File): Promise<Blob> {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1.0 });
     
-    // Add page separator
+    // Add page break for pages after the first
     if (i > 1) {
       allParagraphs.push(
         new Paragraph({
-          children: [new TextRun({ text: '', break: 2 })],
+          text: '',
+          pageBreakBefore: true
         })
       );
     }
     
-    // Add page text
-    textContent.items.forEach((item: any) => {
-      if (item.str && item.str.trim()) {
-        allParagraphs.push(
-          new Paragraph({
-            children: [new TextRun(item.str)],
-          })
-        );
+    // Group text items by approximate Y position
+    const lineGroups: Array<{ y: number; items: Array<{ text: string; x: number; width: number; fontSize: number }>; fontSize: number }> = [];
+    const yThreshold = 2;
+    
+    for (const item of textContent.items as any[]) {
+      if (!item.str || !item.str.trim()) continue;
+      
+      const y = Math.round(item.transform[5]);
+      const x = item.transform[4];
+      const height = item.height;
+      
+      let lineGroup = lineGroups.find(group => Math.abs(group.y - y) < yThreshold);
+      
+      if (!lineGroup) {
+        lineGroup = { y, items: [], fontSize: height };
+        lineGroups.push(lineGroup);
       }
-    });
+      
+      lineGroup.items.push({
+        text: item.str,
+        x: x,
+        width: item.width,
+        fontSize: height
+      });
+      
+      lineGroup.fontSize = Math.max(lineGroup.fontSize, height);
+    }
+    
+    // Sort line groups from top to bottom
+    lineGroups.sort((a, b) => b.y - a.y);
+    
+    // Combine lines into paragraphs
+    let currentParagraph: string[] = [];
+    let prevY: number | null = null;
+    let prevFontSize: number | null = null;
+    let firstLineOfParagraph: typeof lineGroups[0] | null = null;
+    
+    for (const lineGroup of lineGroups) {
+      // Sort items in line from left to right
+      lineGroup.items.sort((a, b) => a.x - b.x);
+      
+      // Build line text
+      let lineText = '';
+      let lastX = 0;
+      
+      for (let idx = 0; idx < lineGroup.items.length; idx++) {
+        const item = lineGroup.items[idx];
+        
+        if (idx > 0) {
+          const gap = item.x - (lastX + lineGroup.items[idx - 1].width);
+          if (gap > 3) {
+            lineText += ' ';
+          }
+        }
+        
+        lineText += item.text;
+        lastX = item.x;
+      }
+      
+      lineText = lineText.trim();
+      if (!lineText) continue;
+      
+      // Determine if this line should start a new paragraph
+      let startNewParagraph = false;
+      
+      if (prevY !== null) {
+        const yGap = prevY - lineGroup.y;
+        const fontSizeChange = prevFontSize && Math.abs(lineGroup.fontSize - prevFontSize) > 3;
+        
+        if (yGap > lineGroup.fontSize * 1.5 || fontSizeChange || lineText.length < 50) {
+          startNewParagraph = true;
+        }
+      } else {
+        startNewParagraph = true;
+      }
+      
+      // Save previous paragraph if starting new one
+      if (startNewParagraph && currentParagraph.length > 0) {
+        const paragraphText = currentParagraph.join(' ');
+        const fontSize = firstLineOfParagraph ? firstLineOfParagraph.fontSize : 12;
+        
+        const options: any = {
+          children: [new TextRun(paragraphText)],
+          spacing: { line: 360, before: 120, after: 120 }
+        };
+        
+        if (fontSize > 16) {
+          options.heading = HeadingLevel.HEADING_1;
+          options.spacing.before = 240;
+          options.spacing.after = 120;
+        } else if (fontSize > 14) {
+          options.heading = HeadingLevel.HEADING_2;
+          options.spacing.before = 200;
+        }
+        
+        if (firstLineOfParagraph) {
+          const avgX = firstLineOfParagraph.items.reduce((sum, item) => sum + item.x, 0) / firstLineOfParagraph.items.length;
+          if (avgX > viewport.width * 0.3 && avgX < viewport.width * 0.7 && paragraphText.length < 80) {
+            options.alignment = AlignmentType.CENTER;
+          }
+        }
+        
+        allParagraphs.push(new Paragraph(options));
+        currentParagraph = [];
+        firstLineOfParagraph = null;
+      }
+      
+      // Start new paragraph tracking
+      if (currentParagraph.length === 0) {
+        firstLineOfParagraph = lineGroup;
+      }
+      
+      currentParagraph.push(lineText);
+      prevY = lineGroup.y;
+      prevFontSize = lineGroup.fontSize;
+    }
+    
+    // Add final paragraph
+    if (currentParagraph.length > 0) {
+      allParagraphs.push(
+        new Paragraph({
+          children: [new TextRun(currentParagraph.join(' '))],
+          spacing: { line: 360, before: 120, after: 120 }
+        })
+      );
+    }
   }
   
   const doc = new Document({
     sections: [{
-      properties: {},
-      children: allParagraphs,
-    }],
+      properties: {
+        page: {
+          margin: {
+            top: 1440,
+            right: 1440,
+            bottom: 1440,
+            left: 1440,
+          }
+        }
+      },
+      children: allParagraphs
+    }]
   });
   
   const blob = await Packer.toBlob(doc);

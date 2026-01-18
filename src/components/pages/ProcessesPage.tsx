@@ -258,16 +258,25 @@ const ImageToolsPage: React.FC = () => {
   const processOCR = async (file: File): Promise<string> => {
     try {
       const Tesseract = await import('tesseract.js');
-      const result = await Tesseract.recognize(file, 'eng', {
+      
+      // Create worker with CDN paths for Tesseract.js
+      const worker = await Tesseract.createWorker('eng', 1, {
         logger: (m) => {
           if (m.status === 'recognizing text') {
             console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
           }
-        }
+        },
+        workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+        langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+        corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
       });
+
+      const result = await worker.recognize(file);
+      await worker.terminate();
+      
       return result.data.text;
     } catch (err: any) {
-      throw new Error(`OCR failed: ${err.message}`);
+      throw new Error(`OCR failed: ${err.message}. Please check your internet connection for the first use.`);
     }
   };
 

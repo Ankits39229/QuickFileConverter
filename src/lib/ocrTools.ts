@@ -14,24 +14,29 @@ export async function performOCR(
   onProgress?: OCRProgressCallback
 ): Promise<string> {
   try {
-    const result = await Tesseract.recognize(
-      imageFile,
-      'eng',
-      {
-        logger: (m) => {
-          if (onProgress && m.status) {
-            onProgress({
-              status: m.status,
-              progress: m.progress || 0
-            });
-          }
+    // Create a worker with CDN paths for Tesseract.js
+    const worker = await Tesseract.createWorker('eng', 1, {
+      logger: (m) => {
+        if (onProgress && m.status) {
+          onProgress({
+            status: m.status,
+            progress: m.progress || 0
+          });
         }
-      }
-    );
+      },
+      // Use CDN for worker and language files (will be cached)
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
+    });
+
+    const result = await worker.recognize(imageFile);
+    await worker.terminate();
+    
     return result.data.text;
   } catch (error) {
     console.error('OCR Error:', error);
-    throw new Error('Failed to perform OCR on image');
+    throw new Error('Failed to perform OCR on image. Please check your internet connection for the first use.');
   }
 }
 
@@ -104,10 +109,8 @@ export async function convertPdfToSearchable(
   pdfFile: File,
   onProgress?: OCRProgressCallback
 ): Promise<Blob> {
-  const pdfjsLib = await import('pdfjs-dist');
-  // Disable worker to avoid Promise.withResolvers issue
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-  (pdfjsLib as any).GlobalWorkerOptions.workerPort = null;
+  const { getPdfLib } = await import('./pdfWorkerConfig');
+  const pdfjsLib = await getPdfLib();
   
   const arrayBuffer = await pdfFile.arrayBuffer();
   const loadedPdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;

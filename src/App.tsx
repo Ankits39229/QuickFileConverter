@@ -12,7 +12,6 @@ import ExcelToolsPage from './components/pages/ExcelTools.tsx';
 import PowerPointToolsPage from './components/pages/PowerPointTools.tsx';
 import HelpPage from './components/pages/Help.tsx';
 import ProcessesPage from './components/pages/ProcessesPage.tsx';
-import DigitalSignaturePage from './components/pages/DigitalSignature.tsx';
 
 // Page mapping
 const pageComponents: Record<string, React.ComponentType> = {
@@ -23,7 +22,6 @@ const pageComponents: Record<string, React.ComponentType> = {
   powerpointtools: PowerPointToolsPage,
   help: HelpPage,
   processespage: ProcessesPage,
-  digitalsignature: DigitalSignaturePage,
 };
 
 function App() {

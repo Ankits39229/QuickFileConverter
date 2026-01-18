@@ -24,39 +24,6 @@ Features added:
 - Support for multiple image formats (PNG, JPG, JPEG, WebP, GIF)
 - Invisible text layers for searchable PDFs
 
-### 2. Digital Signature Panel ✅
-
-#### New File Created: `src/components/pages/DigitalSignature.tsx`
-Complete digital signature interface with:
-- **Sign Document** - Add digital signatures to PDFs
-  - Signer name, reason, location fields
-  - Optional certificate upload (.pfx, .p12)
-  - Certificate password support
-  - Professional UI with form validation
-  
-- **Verify Signature** - Verify PDF digital signatures
-  - Signature validation
-  - Signer information display
-  - Timestamp verification
-  - Visual feedback (valid/invalid states)
-
-#### New File Created: `DIGITAL_SIGNATURE_INTEGRATION.md`
-Comprehensive integration guide including:
-- iLovePDF API integration steps
-- Alternative services (DocuSign, Adobe Sign)
-- Backend integration examples
-- Security best practices
-- Troubleshooting guide
-- Error handling strategies
-
-#### Updated: `src/components/layout/AppSidebar.tsx`
-- Added "Digital Signature" navigation item with FileSignature icon
-- Placed between "PDF Tools" and "Excel Tools" for logical flow
-
-#### Updated: `src/App.tsx`
-- Added Digital Signature page routing
-- Imported and registered DigitalSignaturePage component
-
 ## Technical Details
 
 ### Dependencies Used
@@ -76,34 +43,13 @@ No additional package installations required!
 - ✅ Error handling and validation
 - ✅ Visual progress indicators
 
-#### Digital Signature Features:
-- ✅ Modern, clean UI design
-- ✅ Two-mode operation (Sign/Verify)
-- ✅ Form validation
-- ✅ Certificate support (prepared for real integration)
-- ✅ Visual feedback for all states
-- ✅ Download signed documents
-- ✅ Comprehensive verification results
-
-### Integration Ready
-
-The Digital Signature feature is built with **demo functionality** but structured for easy API integration. Follow the guide in `DIGITAL_SIGNATURE_INTEGRATION.md` to:
-1. Get iLovePDF API credentials
-2. Add API integration code
-3. Replace simulated functions with real API calls
-4. Deploy with secure backend proxy
-
 ## File Changes Summary
 
 ### New Files:
 - `src/lib/ocrTools.ts` - OCR functionality library
-- `src/components/pages/DigitalSignature.tsx` - Digital signature UI
-- `DIGITAL_SIGNATURE_INTEGRATION.md` - API integration guide
 
 ### Modified Files:
 - `src/components/pages/Tools.tsx` - Added OCR operations
-- `src/components/layout/AppSidebar.tsx` - Added Digital Signature nav item
-- `src/App.tsx` - Added Digital Signature page routing
 
 ## Usage Instructions
 
@@ -116,18 +62,6 @@ The Digital Signature feature is built with **demo functionality** but structure
 3. Watch the progress bar during OCR processing
 4. Download the result or copy extracted text
 
-### Using Digital Signatures:
-1. Navigate to **Digital Signature** page (new sidebar item)
-2. Choose operation:
-   - **Sign Document**: Add a digital signature
-   - **Verify Signature**: Check signature validity
-3. Upload your PDF file
-4. For signing:
-   - Enter signer name (required)
-   - Add reason and location (optional)
-   - Upload certificate if available
-5. Process and download the result
-
 ## Next Steps for Production
 
 ### For OCR:
@@ -135,14 +69,6 @@ The Digital Signature feature is built with **demo functionality** but structure
 2. Optimize for large PDF files (add page range selection)
 3. Add language selection for OCR (currently English only)
 4. Consider adding OCR quality settings
-
-### For Digital Signatures:
-1. Obtain API credentials from iLovePDF or alternative service
-2. Implement backend API proxy for security
-3. Add real certificate validation
-4. Implement signature appearance customization
-5. Add batch signing support
-6. Add signature history/audit log
 
 ## Testing Recommendations
 
@@ -152,16 +78,9 @@ The Digital Signature feature is built with **demo functionality** but structure
    - Test with multi-page PDFs
    - Verify searchability of output PDFs
 
-2. **Digital Signature Testing**:
-   - Test sign workflow with demo data
-   - Verify UI responsiveness
-   - Test file size limits
-   - Check error handling
-
 ## Notes
 
 - OCR processing can be slow for large files or multi-page PDFs
-- Digital signatures currently use simulated backend (demo mode)
 - All file processing happens client-side (privacy-first)
 - Tesseract.js worker is loaded on-demand
 - No external API calls in OCR features (fully offline capable)
@@ -169,6 +88,5 @@ The Digital Signature feature is built with **demo functionality** but structure
 ## Support
 
 For questions or issues:
-- Check the integration guide: `DIGITAL_SIGNATURE_INTEGRATION.md`
 - Review OCR implementation: `src/lib/ocrTools.ts`
 - Check error logs in browser console

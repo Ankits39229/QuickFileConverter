@@ -16,6 +16,10 @@ if (!Promise.withResolvers) {
   };
 }
 
+// Initialize PDF.js worker configuration early
+import { configurePdfWorker } from './lib/pdfWorkerConfig';
+configurePdfWorker();
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

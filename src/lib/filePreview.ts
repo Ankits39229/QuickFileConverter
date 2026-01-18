@@ -2,13 +2,10 @@
  * File preview utilities for PDF, Excel, Word, and Image files
  */
 
-import * as pdfjsLib from 'pdfjs-dist';
+import { pdfjsLib, configurePdfWorker } from './pdfWorkerConfig';
 
-// Set up PDF.js worker - disable to avoid Promise.withResolvers issue
-if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-  (pdfjsLib as any).GlobalWorkerOptions.workerPort = null;
-}
+// Configure PDF.js worker on module load
+configurePdfWorker();
 
 export interface FilePreview {
   type: 'pdf' | 'excel' | 'word' | 'image';
