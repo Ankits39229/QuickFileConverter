@@ -5,8 +5,9 @@
 
 import * as pdfjsLib from 'pdfjs-dist';
 
-// PDF.js worker URL from CDN - matches the installed version
-const PDF_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs';
+// Use local worker from node_modules for offline support
+// pdfjs-dist 3.x uses .js extension
+const PDF_WORKER_URL = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString();
 
 let isConfigured = false;
 

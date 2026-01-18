@@ -376,186 +376,55 @@ export async function addHeadersToWord(file: File, headerText: string): Promise<
 
 // Word to PDF conversion with better formatting preservation
 export async function convertWordToPdfEnhanced(file: File): Promise<Blob> {
+  // Client-side Word to PDF conversion using mammoth + pdf-lib
+  // Note: This provides basic conversion. For professional quality, Microsoft Office is required.
+  
   try {
-    // Extract text with mammoth with enhanced styling
     const arrayBuffer = await file.arrayBuffer();
     
-    // mammoth expects Buffer in Node.js or ArrayBuffer in browser
-    let mammothInput;
-    if (typeof Buffer !== 'undefined' && !(arrayBuffer instanceof Buffer)) {
-      // Node.js - convert ArrayBuffer to Buffer
-      mammothInput = { buffer: Buffer.from(arrayBuffer) };
-    } else {
-      // Browser
-      mammothInput = { arrayBuffer };
-    }
-    
-    // Enhanced style mapping for better formatting preservation
-    const result = await mammoth.convertToHtml({
-      ...mammothInput,
-      styleMap: [
-        "p[style-name='Heading 1'] => h1:fresh",
-        "p[style-name='Heading 2'] => h2:fresh",
-        "p[style-name='Heading 3'] => h3:fresh",
-        "p[style-name='Title'] => h1.title:fresh",
-        "r[style-name='Strong'] => strong",
-        "p[style-name='Quote'] => blockquote",
-      ]
-    });
+    // Extract HTML from Word document
+    const result = await mammoth.convertToHtml({ arrayBuffer });
     const htmlContent = result.value;
     
-    // Parse HTML - browser has DOMParser, Node.js doesn't
-    let bodyElements: HTMLCollection;
+    // Parse HTML to extract text with basic formatting
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
     
-    if (typeof window !== 'undefined' && typeof DOMParser !== 'undefined') {
-      // Browser environment - use DOMParser
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlContent, 'text/html');
-      bodyElements = doc.body.children;
-    } else {
-      // Node.js environment - manually parse simple HTML
-      // For production Electron app, this path won't be used as Electron provides DOMParser
-      const lines = htmlContent
-        .replace(/<[^>]+>/g, '\n')
-        .split('\n')
-        .filter(line => line.trim());
-      
-      // Create a minimal mock structure for Node.js testing
-      bodyElements = lines.map(text => ({
-        tagName: 'P',
-        textContent: text,
-        querySelector: () => null
-      })) as any;
-    }
-    
-    // Create PDF with better font support
+    // Create PDF
     const pdfDoc = await PDFDocument.create();
     const timesRomanFont = await pdfDoc.embedFont(StandardFonts.TimesRoman);
     const timesRomanBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
-    const timesRomanItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
-    const timesRomanBoldItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanBoldItalic);
     const courierFont = await pdfDoc.embedFont(StandardFonts.Courier);
     
-    const margin = 72; // 1 inch
-    const pageWidth = 595; // A4 width in points
-    const pageHeight = 842; // A4 height in points
-    const maxWidth = pageWidth - (margin * 2);
+    let page = pdfDoc.addPage();
+    const { width, height } = page.getSize();
+    const margin = 50;
+    let yPosition = height - margin;
+    const lineHeight = 14;
+    const maxWidth = width - (2 * margin);
     
-    let page = pdfDoc.addPage([pageWidth, pageHeight]);
-    let yPosition = pageHeight - margin;
-    
-    // Helper function to check if element has specific child tag
-    const hasChildTag = (element: any, tagName: string): boolean => {
-      if (element.querySelector) {
-        return element.querySelector(tagName) !== null;
+    // Helper function to add new page when needed
+    const checkPageBreak = () => {
+      if (yPosition < margin + lineHeight) {
+        page = pdfDoc.addPage();
+        yPosition = height - margin;
+        return true;
       }
       return false;
     };
     
-    // Helper function to process text with inline formatting
-    const processTextWithFormatting = (element: any, baseFontSize: number, baseFont: any): void => {
-      if (!element.childNodes || element.childNodes.length === 0) {
-        // No child nodes, process as plain text
-        const text = element.textContent || '';
-        if (text.trim()) {
-          drawTextWithWrapping(text, baseFontSize, baseFont);
-        }
-        return;
-      }
-      
-      // Process child nodes with their formatting
-      const fragments: Array<{text: string, font: any}> = [];
-      
-      const processNode = (node: any): void => {
-        if (node.nodeType === 3) { // Text node
-          const text = node.textContent || '';
-          if (text) {
-            fragments.push({ text, font: baseFont });
-          }
-        } else if (node.nodeType === 1) { // Element node
-          const tagName = node.tagName.toLowerCase();
-          const text = node.textContent || '';
-          if (!text) return;
-          
-          let nodeFont = baseFont;
-          if (tagName === 'strong' || tagName === 'b') {
-            nodeFont = baseFontSize >= 16 ? timesRomanBold : 
-                      (baseFont === timesRomanItalic ? timesRomanBoldItalic : timesRomanBold);
-          } else if (tagName === 'em' || tagName === 'i') {
-            nodeFont = baseFont === timesRomanBold ? timesRomanBoldItalic : timesRomanItalic;
-          } else if (tagName === 'code') {
-            nodeFont = courierFont;
-          }
-          
-          fragments.push({ text, font: nodeFont });
-        }
-      };
-      
-      element.childNodes.forEach((node: any) => processNode(node));
-      
-      // Now draw fragments with word wrapping
-      let currentLine = '';
-      let currentLineFragments: Array<{text: string, font: any}> = [];
-      
-      for (const fragment of fragments) {
-        const words = fragment.text.split(' ');
-        
-        for (let i = 0; i < words.length; i++) {
-          const word = words[i];
-          const testLine = currentLine + (currentLine ? ' ' : '') + word;
-          const testWidth = fragment.font.widthOfTextAtSize(testLine, baseFontSize);
-          
-          if (testWidth > maxWidth && currentLine) {
-            // Draw current line
-            drawLine(currentLine, baseFontSize, fragment.font);
-            currentLine = word;
-            currentLineFragments = [{ text: word, font: fragment.font }];
-          } else {
-            currentLine = testLine;
-            if (currentLineFragments.length === 0 || currentLineFragments[currentLineFragments.length - 1].font !== fragment.font) {
-              currentLineFragments.push({ text: word, font: fragment.font });
-            }
-          }
-        }
-      }
-      
-      // Draw remaining line
-      if (currentLine) {
-        const font = fragments.length > 0 ? fragments[0].font : baseFont;
-        drawLine(currentLine, baseFontSize, font);
-      }
-    };
-    
-    const drawLine = (text: string, fontSize: number, font: any): void => {
-      const lineHeight = fontSize * 1.3;
-      
-      if (yPosition < margin) {
-        page = pdfDoc.addPage([pageWidth, pageHeight]);
-        yPosition = pageHeight - margin;
-      }
-      
-      page.drawText(text, {
-        x: margin,
-        y: yPosition,
-        size: fontSize,
-        font: font,
-        color: rgb(0, 0, 0)
-      });
-      
-      yPosition -= lineHeight;
-    };
-    
-    const drawTextWithWrapping = (text: string, fontSize: number, font: any): void => {
-      const lineHeight = fontSize * 1.3;
+    // Helper function to wrap text
+    const wrapText = (text: string, font: any, fontSize: number, maxWidth: number): string[] => {
       const words = text.split(' ');
+      const lines: string[] = [];
       let currentLine = '';
       
       for (const word of words) {
         const testLine = currentLine ? `${currentLine} ${word}` : word;
-        const width = font.widthOfTextAtSize(testLine, fontSize);
+        const textWidth = font.widthOfTextAtSize(testLine, fontSize);
         
-        if (width > maxWidth && currentLine) {
-          drawLine(currentLine, fontSize, font);
+        if (textWidth > maxWidth && currentLine) {
+          lines.push(currentLine);
           currentLine = word;
         } else {
           currentLine = testLine;
@@ -563,83 +432,82 @@ export async function convertWordToPdfEnhanced(file: File): Promise<Blob> {
       }
       
       if (currentLine) {
-        drawLine(currentLine, fontSize, font);
+        lines.push(currentLine);
       }
+      
+      return lines;
     };
+    
+    // Process HTML elements
+    const bodyElements = doc.body.children;
     
     for (let i = 0; i < bodyElements.length; i++) {
       const element = bodyElements[i];
       const tagName = element.tagName.toLowerCase();
-      const text = element.textContent || '';
+      const text = element.textContent?.trim() || '';
       
-      if (!text.trim()) continue;
+      if (!text) continue;
       
-      let fontSize = 12;
       let font = timesRomanFont;
-      let lineSpacing = 1.3;
-      let paragraphSpacing = 0.3;
-      let indentation = 0;
+      let fontSize = 12;
+      let color = rgb(0, 0, 0);
+      let extraSpaceBefore = 0;
+      let extraSpaceAfter = 0;
       
-      // Adjust for different elements
+      // Apply formatting based on element type
       if (tagName === 'h1') {
-        fontSize = 24;
         font = timesRomanBold;
-        paragraphSpacing = 0.8;
+        fontSize = 18;
+        extraSpaceBefore = 20;
+        extraSpaceAfter = 10;
       } else if (tagName === 'h2') {
-        fontSize = 20;
         font = timesRomanBold;
-        paragraphSpacing = 0.6;
-      } else if (tagName === 'h3') {
         fontSize = 16;
+        extraSpaceBefore = 16;
+        extraSpaceAfter = 8;
+      } else if (tagName === 'h3') {
         font = timesRomanBold;
-        paragraphSpacing = 0.5;
-      } else if (tagName === 'blockquote') {
-        fontSize = 11;
-        font = timesRomanItalic;
-        indentation = 36; // 0.5 inch indent
-        paragraphSpacing = 0.4;
-      } else {
-        // Check for inline formatting
-        const hasBold = hasChildTag(element, 'strong') || hasChildTag(element, 'b');
-        const hasItalic = hasChildTag(element, 'em') || hasChildTag(element, 'i');
-        const hasCode = hasChildTag(element, 'code');
+        fontSize = 14;
+        extraSpaceBefore = 12;
+        extraSpaceAfter = 6;
+      } else if (tagName === 'strong' || tagName === 'b') {
+        font = timesRomanBold;
+      } else if (tagName === 'code' || tagName === 'pre') {
+        font = courierFont;
+        fontSize = 10;
+      }
+      
+      // Add space before
+      yPosition -= extraSpaceBefore;
+      checkPageBreak();
+      
+      // Wrap and draw text
+      const lines = wrapText(text, font, fontSize, maxWidth);
+      
+      for (const line of lines) {
+        checkPageBreak();
         
-        if (hasCode) {
-          font = courierFont;
-          fontSize = 11;
-        } else if (hasBold && hasItalic) {
-          font = timesRomanBoldItalic;
-        } else if (hasBold) {
-          font = timesRomanBold;
-        } else if (hasItalic) {
-          font = timesRomanItalic;
-        }
+        page.drawText(line, {
+          x: margin,
+          y: yPosition,
+          size: fontSize,
+          font: font,
+          color: color,
+        });
+        
+        yPosition -= lineHeight;
       }
       
-      const lineHeight = fontSize * lineSpacing;
-      
-      // Add space before paragraph
-      if (i > 0) {
-        yPosition -= lineHeight * paragraphSpacing;
-      }
-      
-      // Check if we need a new page
-      if (yPosition < margin + lineHeight * 2) {
-        page = pdfDoc.addPage([pageWidth, pageHeight]);
-        yPosition = pageHeight - margin;
-      }
-      
-      // Process text with proper formatting
-      processTextWithFormatting(element, fontSize, font);
-      
-      // Small extra spacing after paragraph
-      yPosition -= lineHeight * 0.1;
+      // Add space after
+      yPosition -= extraSpaceAfter;
     }
     
     const pdfBytes = await pdfDoc.save();
-    return new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
-  } catch (err: any) {
-    throw new Error(`Failed to convert to PDF: ${err.message}`);
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+    
+  } catch (error) {
+    console.error('Word to PDF conversion error:', error);
+    throw new Error(`Failed to convert Word to PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 

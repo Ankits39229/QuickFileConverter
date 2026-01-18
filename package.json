@@ -54,7 +54,7 @@
     "motion": "^12.23.12",
     "netstat": "^0.0.2",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^4.8.69",
+    "pdfjs-dist": "^3.11.174",
     "pptxgenjs": "^3.12.0",
     "ps-list": "^8.1.1",
     "react": "^18.2.0",

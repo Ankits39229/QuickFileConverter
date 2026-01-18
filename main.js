@@ -348,6 +348,42 @@ function createWindow() {
     return await openPath(filePath);
   });
 
+  // File conversion handlers - Word <-> PDF
+  ipcMain.handle('convert-word-to-pdf', async (event, { inputPath, outputPath }) => {
+    try {
+      return await convertWordToPdfOffice(inputPath, outputPath);
+    } catch (error) {
+      console.error('Word to PDF IPC error:', error);
+      throw new Error(error.error || error.message || 'Unknown conversion error');
+    }
+  });
+
+  ipcMain.handle('convert-pdf-to-word', async (event, { inputPath, outputPath }) => {
+    try {
+      return await convertPdfToWordOffice(inputPath, outputPath);
+    } catch (error) {
+      console.error('PDF to Word IPC error:', error);
+      throw new Error(error.error || error.message || 'Unknown conversion error');
+    }
+  });
+
+  // File system helpers for conversions
+  ipcMain.handle('fs-write-temp-file', async (event, { fileName, data }) => {
+    return await writeTempFile(fileName, data);
+  });
+
+  ipcMain.handle('fs-read-file', async (event, { filePath }) => {
+    return await readFileAsync(filePath);
+  });
+
+  ipcMain.handle('fs-delete-file', async (event, { filePath }) => {
+    return await deleteFileAsync(filePath);
+  });
+
+  ipcMain.handle('fs-get-temp-dir', async () => {
+    return await getTempDirectory();
+  });
+
   ipcMain.handle('system-get-downloads-path', async () => {
     return await getDefaultDownloadsPath();
   });
@@ -2824,3 +2860,223 @@ function extractVolumeSerial(buffer) {
   }
 }
 
+
+// ============================================================================
+// FILE CONVERSION FUNCTIONS - Professional Offline Conversion
+// ============================================================================
+
+/**
+ * Convert Word document to PDF using Microsoft Office COM automation
+ * Professional quality output - works completely offline
+ */
+async function convertWordToPdfOffice(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    const scriptPath = path.join(__dirname, 'scripts', 'Convert-WordToPdf.ps1');
+    
+    // Verify script exists
+    if (!fs.existsSync(scriptPath)) {
+      reject(new Error(`PowerShell script not found: ${scriptPath}`));
+      return;
+    }
+    
+    // Verify input file exists
+    if (!fs.existsSync(inputPath)) {
+      reject(new Error(`Input Word file not found: ${inputPath}`));
+      return;
+    }
+    
+    // Ensure paths are properly escaped for PowerShell
+    const escapedInput = inputPath.replace(/'/g, "''");
+    const escapedOutput = outputPath.replace(/'/g, "''");
+    
+    const command = `powershell.exe -ExecutionPolicy Bypass -NoProfile -File "${scriptPath}" -InputFile "${escapedInput}" -OutputFile "${escapedOutput}"`;
+    
+    console.log('Executing Word to PDF conversion:', command);
+    
+    exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) {
+        console.error('Word to PDF conversion error:', error);
+        console.error('stderr:', stderr);
+        console.error('stdout:', stdout);
+        
+        let errorMessage = 'Conversion failed';
+        
+        // Check for common errors
+        if (stderr.includes('not found') || stderr.includes('Cannot find')) {
+          errorMessage = 'PowerShell script or input file not found';
+        } else if (stderr.includes('COM') || stderr.includes('Word.Application')) {
+          errorMessage = 'Microsoft Word is not installed or cannot be accessed. Please ensure Microsoft Office is installed.';
+        } else if (stderr) {
+          errorMessage = stderr.trim();
+        } else {
+          errorMessage = error.message;
+        }
+        
+        reject(new Error(errorMessage));
+        return;
+      }
+      
+      console.log('Conversion stdout:', stdout);
+      
+      // Check if output file exists
+      if (fs.existsSync(outputPath)) {
+        resolve({
+          success: true,
+          message: 'Conversion completed successfully',
+          outputPath: outputPath
+        });
+      } else {
+        reject(new Error('Output file was not created. The conversion may have failed silently.'));
+      }
+    });
+  });
+}
+
+/**
+ * Convert PDF to Word document using Microsoft Office COM automation
+ * Professional quality output - works completely offline
+ */
+async function convertPdfToWordOffice(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    const scriptPath = path.join(__dirname, 'scripts', 'Convert-PdfToWord-Office.ps1');
+    
+    // Verify script exists
+    if (!fs.existsSync(scriptPath)) {
+      reject(new Error(`PowerShell script not found: ${scriptPath}`));
+      return;
+    }
+    
+    // Verify input file exists
+    if (!fs.existsSync(inputPath)) {
+      reject(new Error(`Input PDF file not found: ${inputPath}`));
+      return;
+    }
+    
+    // Ensure paths are properly escaped for PowerShell
+    const escapedInput = inputPath.replace(/'/g, "''");
+    const escapedOutput = outputPath.replace(/'/g, "''");
+    
+    const command = `powershell.exe -ExecutionPolicy Bypass -NoProfile -File "${scriptPath}" -InputFile "${escapedInput}" -OutputFile "${escapedOutput}"`;
+    
+    console.log('Executing PDF to Word conversion:', command);
+    
+    exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) {
+        console.error('PDF to Word conversion error:', error);
+        console.error('stderr:', stderr);
+        console.error('stdout:', stdout);
+        
+        let errorMessage = 'Conversion failed';
+        
+        // Check for common errors
+        if (stderr.includes('not found') || stderr.includes('Cannot find')) {
+          errorMessage = 'PowerShell script or input file not found';
+        } else if (stderr.includes('COM') || stderr.includes('Word.Application')) {
+          errorMessage = 'Microsoft Word is not installed or cannot be accessed. Please ensure Microsoft Office is installed.';
+        } else if (stderr) {
+          errorMessage = stderr.trim();
+        } else {
+          errorMessage = error.message;
+        }
+        
+        reject(new Error(errorMessage));
+        return;
+      }
+      
+      console.log('Conversion stdout:', stdout);
+      
+      // Check if output file exists
+      if (fs.existsSync(outputPath)) {
+        resolve({
+          success: true,
+          message: 'Conversion completed successfully',
+          outputPath: outputPath
+        });
+      } else {
+        reject(new Error('Output file was not created. The conversion may have failed silently.'));
+      }
+    });
+  });
+}
+
+/**
+ * Write data to a temporary file
+ */
+async function writeTempFile(fileName, data) {
+  const os = require('os');
+  const crypto = require('crypto');
+  
+  // Create a unique temp directory for this conversion
+  const uniqueId = crypto.randomBytes(8).toString('hex');
+  const tempDir = path.join(os.tmpdir(), 'file-converter', uniqueId);
+  
+  // Ensure directory exists
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  
+  const filePath = path.join(tempDir, fileName);
+  
+  return new Promise((resolve, reject) => {
+    // Convert data from Uint8Array or similar to Buffer
+    const buffer = Buffer.from(data);
+    
+    fs.writeFile(filePath, buffer, (error) => {
+      if (error) {
+        reject({ success: false, error: error.message });
+      } else {
+        resolve({ success: true, filePath: filePath, tempDir: tempDir });
+      }
+    });
+  });
+}
+
+/**
+ * Read file and return as buffer
+ */
+async function readFileAsync(filePath) {
+  return new Promise((resolve, reject) => {
+    fs.readFile(filePath, (error, data) => {
+      if (error) {
+        reject({ success: false, error: error.message });
+      } else {
+        // Convert to array for transfer
+        const array = new Uint8Array(data);
+        resolve({ success: true, data: Array.from(array) });
+      }
+    });
+  });
+}
+
+/**
+ * Delete a file
+ */
+async function deleteFileAsync(filePath) {
+  return new Promise((resolve, reject) => {
+    fs.unlink(filePath, (error) => {
+      if (error && error.code !== 'ENOENT') {
+        reject({ success: false, error: error.message });
+      } else {
+        resolve({ success: true });
+      }
+    });
+  });
+}
+
+/**
+ * Get temp directory path
+ */
+async function getTempDirectory() {
+  const os = require('os');
+  const crypto = require('crypto');
+  
+  const uniqueId = crypto.randomBytes(8).toString('hex');
+  const tempDir = path.join(os.tmpdir(), 'file-converter', uniqueId);
+  
+  // Ensure directory exists
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  
+  return { success: true, path: tempDir };
+}

@@ -663,6 +663,7 @@ export async function addWatermarkToPdf(
 
 // Convert PDF to Word (extract text and create DOCX)
 export async function convertPdfToWord(file: File): Promise<Blob> {
+  // Use client-side conversion (works without Office, but quality is lower)
   const { getPdfLib } = await import('./pdfWorkerConfig');
   const pdfjsLib = await getPdfLib();
   

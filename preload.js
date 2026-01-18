@@ -76,6 +76,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getRunningScripts: () => ipcRenderer.invoke('get-running-scripts'),
     onScriptCompleted: (callback) => ipcRenderer.on('script-completed', callback),
     removeScriptCompletedListener: (callback) => ipcRenderer.removeListener('script-completed', callback)
+  },
+
+  // File conversion APIs - Professional offline conversion
+  conversion: {
+    wordToPdf: (inputPath, outputPath) => ipcRenderer.invoke('convert-word-to-pdf', { inputPath, outputPath }),
+    pdfToWord: (inputPath, outputPath) => ipcRenderer.invoke('convert-pdf-to-word', { inputPath, outputPath })
+  },
+
+  // File system APIs for conversion temp files
+  fs: {
+    writeTempFile: (fileName, data) => ipcRenderer.invoke('fs-write-temp-file', { fileName, data }),
+    readFile: (filePath) => ipcRenderer.invoke('fs-read-file', { filePath }),
+    deleteFile: (filePath) => ipcRenderer.invoke('fs-delete-file', { filePath }),
+    getTempDir: () => ipcRenderer.invoke('fs-get-temp-dir')
   }
 });
 

@@ -26,15 +26,9 @@ import {
   PageOrientation, 
   PageSize 
 } from '../../lib/pdfTools';
-import { 
-  convertImageToSearchablePdf, 
-  convertPdfToSearchable, 
-  extractTextFromImage,
-  OCRProgress 
-} from '../../lib/ocrTools';
 import { sanitizeText, sanitizeNumber, sanitizePageRange, sanitizePageNumbers, validateFileSize, validateBatchFileSize, FILE_SIZE_LIMITS } from '../../lib/sanitize';
 
-type Operation = 'merge' | 'images-to-pdf' | 'split' | 'compress' | 'pdf-to-images' | 'rotate' | 'remove-pages' | 'page-numbers' | 'watermark' | 'pdf-to-word' | 'ocr-image' | 'ocr-pdf' | 'extract-text';
+type Operation = 'merge' | 'images-to-pdf' | 'split' | 'compress' | 'pdf-to-images' | 'rotate' | 'remove-pages' | 'page-numbers' | 'watermark' | 'pdf-to-word';
 
 interface LocalFile {
   id: string;
@@ -82,10 +76,6 @@ const ToolsPage: React.FC = () => {
   // PDF to images result
   const [extractedImages, setExtractedImages] = useState<Array<{ pageNumber: number; dataUrl: string }>>([]);
   
-  // OCR results
-  const [ocrProgress, setOcrProgress] = useState<OCRProgress | null>(null);
-  const [extractedText, setExtractedText] = useState<string>('');
-  
   // Drag & drop feedback
   const [isDragging, setIsDragging] = useState(false);
   const [dragValid, setDragValid] = useState(true);
@@ -111,10 +101,10 @@ const ToolsPage: React.FC = () => {
     if (!incoming.length) return false;
     if (operation === 'merge' || operation === 'split' || operation === 'compress' || 
         operation === 'pdf-to-images' || operation === 'rotate' || operation === 'remove-pages' || 
-        operation === 'page-numbers' || operation === 'watermark' || operation === 'pdf-to-word' || operation === 'ocr-pdf') {
+        operation === 'page-numbers' || operation === 'watermark' || operation === 'pdf-to-word') {
       return incoming.every(isPdf);
     }
-    if (operation === 'images-to-pdf' || operation === 'ocr-image' || operation === 'extract-text') {
+    if (operation === 'images-to-pdf') {
       return incoming.every(isImage);
     }
     return false;
@@ -244,8 +234,6 @@ const ToolsPage: React.FC = () => {
     setWatermarkOpacity(0.3);
     setWatermarkRotation(45);
     setExtractedImages([]);
-    setOcrProgress(null);
-    setExtractedText('');
   };
   
   const handleUndo = () => {
@@ -484,34 +472,6 @@ const ToolsPage: React.FC = () => {
           url = URL.createObjectURL(blob);
           break;
         }
-        case 'ocr-image': {
-          if (fileList.length !== 1) {
-            setError('Please select exactly one image file.');
-            return;
-          }
-          const blob = await convertImageToSearchablePdf(fileList[0], setOcrProgress);
-          url = URL.createObjectURL(blob);
-          break;
-        }
-        case 'ocr-pdf': {
-          if (fileList.length !== 1) {
-            setError('Please select exactly one PDF file.');
-            return;
-          }
-          const blob = await convertPdfToSearchable(fileList[0], setOcrProgress);
-          url = URL.createObjectURL(blob);
-          break;
-        }
-        case 'extract-text': {
-          if (fileList.length !== 1) {
-            setError('Please select exactly one image file.');
-            return;
-          }
-          const text = await extractTextFromImage(fileList[0], setOcrProgress);
-          setExtractedText(text);
-          // No URL for text extraction, just display the text
-          break;
-        }
         
         default:
           break;
@@ -602,10 +562,7 @@ const ToolsPage: React.FC = () => {
             { key: 'remove-pages', title: 'Remove Pages', desc: 'Delete specific pages from PDF.', icon: <Trash2 size={20}/> },
             { key: 'page-numbers', title: 'Page Numbers', desc: 'Add page numbers to PDF.', icon: <Hash size={20}/> },
             { key: 'watermark', title: 'Watermark', desc: 'Add watermark text to all pages.', icon: <Droplet size={20}/> },
-            { key: 'pdf-to-word', title: 'PDF → Word', desc: 'Convert PDF to editable Word document.', icon: <FileType2 size={20}/> },
-            { key: 'ocr-image', title: 'OCR Image → PDF', desc: 'Convert image to searchable PDF with OCR.', icon: <FileText size={20}/> },
-            { key: 'ocr-pdf', title: 'OCR Scanned PDF', desc: 'Make scanned PDF searchable with OCR.', icon: <FileText size={20}/> },
-            { key: 'extract-text', title: 'Extract Text (OCR)', desc: 'Extract text from image using OCR.', icon: <FileText size={20}/> }
+            { key: 'pdf-to-word', title: 'PDF → Word', desc: 'Convert PDF to editable Word document.', icon: <FileType2 size={20}/> }
           ].map(card => (
             <button key={card.key}
               onClick={() => { setOperation(card.key as Operation); clearAll(); }}
@@ -1160,42 +1117,6 @@ const ToolsPage: React.FC = () => {
             <p className={styles.operationCardDesc}>
               New size: {formatFileSize(compressionResults.compressedSize)}
             </p>
-          )}
-          
-          {/* OCR Progress */}
-          {ocrProgress && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>{ocrProgress.status}</span>
-                <span>{Math.round(ocrProgress.progress * 100)}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${ocrProgress.progress * 100}%` }}
-                />
-              </div>
-            </div>
-          )}
-          
-          {/* Extracted Text Display */}
-          {operation === 'extract-text' && extractedText && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Extracted Text:</h3>
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-md max-h-96 overflow-y-auto">
-                <pre className="whitespace-pre-wrap text-sm font-mono">{extractedText}</pre>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(extractedText);
-                  setSuccess('Text copied to clipboard!');
-                  setTimeout(() => setSuccess(null), 3000);
-                }}
-                className={`px-4 py-2 ${styles.outlineBtn}`}
-              >
-                Copy to Clipboard
-              </button>
-            </div>
           )}
         </div>
       )}
