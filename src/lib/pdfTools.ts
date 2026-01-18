@@ -661,9 +661,22 @@ export async function addWatermarkToPdf(
   return new Blob([pdfBytes.buffer], { type: 'application/pdf' });
 }
 
-// Convert PDF to Word (extract text and create DOCX)
+// Convert PDF to Word with professional formatting preservation
 export async function convertPdfToWord(file: File): Promise<Blob> {
-  // Use client-side conversion (works without Office, but quality is lower)
+  // Try to use Electron IPC if available (uses Office COM if installed)
+  try {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.conversion?.pdfToWord) {
+      const ipcResult = await (window as any).electronAPI.conversion.pdfToWord(file);
+      if (ipcResult && ipcResult.outputPath) {
+        const fileData = await (window as any).electronAPI.fs.readFile(ipcResult.outputPath);
+        return new Blob([fileData], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      }
+    }
+  } catch (error) {
+    console.log('Office conversion not available, using client-side fallback');
+  }
+  
+  // Fallback: Client-side conversion with advanced PDF analysis
   const { getPdfLib } = await import('./pdfWorkerConfig');
   const pdfjsLib = await getPdfLib();
   
@@ -672,151 +685,195 @@ export async function convertPdfToWord(file: File): Promise<Blob> {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   
-  const allParagraphs: any[] = [];
+  const allSections: any[] = [];
   
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const viewport = page.getViewport({ scale: 1.0 });
+  // Helper function to group text by position
+  const groupTextByPosition = (items: any[], pageWidth: number) => {
+    const lineGroups: Map<number, any> = new Map();
+    const yThreshold = 1.5;
     
-    // Add page break for pages after the first
-    if (i > 1) {
-      allParagraphs.push(
-        new Paragraph({
-          text: '',
-          pageBreakBefore: true
-        })
-      );
-    }
-    
-    // Group text items by approximate Y position
-    const lineGroups: Array<{ y: number; items: Array<{ text: string; x: number; width: number; fontSize: number }>; fontSize: number }> = [];
-    const yThreshold = 2;
-    
-    for (const item of textContent.items as any[]) {
+    for (const item of items) {
       if (!item.str || !item.str.trim()) continue;
       
-      const y = Math.round(item.transform[5]);
+      const y = Math.round(item.transform[5] * 10) / 10;
       const x = item.transform[4];
-      const height = item.height;
+      const height = item.height || 12;
       
-      let lineGroup = lineGroups.find(group => Math.abs(group.y - y) < yThreshold);
+      let lineGroup = Array.from(lineGroups.values()).find(g => Math.abs(g.y - y) < yThreshold);
       
       if (!lineGroup) {
-        lineGroup = { y, items: [], fontSize: height };
-        lineGroups.push(lineGroup);
+        lineGroup = { y, items: [], avgFontSize: height };
+        lineGroups.set(y, lineGroup);
       }
       
       lineGroup.items.push({
-        text: item.str,
-        x: x,
-        width: item.width,
-        fontSize: height
+        str: item.str,
+        x,
+        width: item.width || 0,
+        height,
+        fontName: item.fontName,
+        transform: item.transform,
       });
       
-      lineGroup.fontSize = Math.max(lineGroup.fontSize, height);
+      lineGroup.avgFontSize = Math.max(lineGroup.avgFontSize, height);
     }
     
-    // Sort line groups from top to bottom
-    lineGroups.sort((a, b) => b.y - a.y);
+    return Array.from(lineGroups.values()).sort((a, b) => b.y - a.y);
+  };
+  
+  // Helper function to analyze a line group
+  const analyzeLineGroup = (lineGroup: any, pageWidth: number) => {
+    lineGroup.items.sort((a, b) => a.x - b.x);
     
-    // Combine lines into paragraphs
-    let currentParagraph: string[] = [];
-    let prevY: number | null = null;
-    let prevFontSize: number | null = null;
-    let firstLineOfParagraph: typeof lineGroups[0] | null = null;
+    const runs: any[] = [];
+    let fullText = '';
+    let hasBold = false;
+    let hasItalic = false;
     
-    for (const lineGroup of lineGroups) {
-      // Sort items in line from left to right
-      lineGroup.items.sort((a, b) => a.x - b.x);
+    for (let i = 0; i < lineGroup.items.length; i++) {
+      const item = lineGroup.items[i];
       
-      // Build line text
-      let lineText = '';
-      let lastX = 0;
-      
-      for (let idx = 0; idx < lineGroup.items.length; idx++) {
-        const item = lineGroup.items[idx];
-        
-        if (idx > 0) {
-          const gap = item.x - (lastX + lineGroup.items[idx - 1].width);
-          if (gap > 3) {
-            lineText += ' ';
-          }
+      if (i > 0) {
+        const gap = item.x - (lineGroup.items[i - 1].x + lineGroup.items[i - 1].width);
+        if (gap > 2) {
+          runs.push({ text: ' ' });
+          fullText += ' ';
         }
-        
-        lineText += item.text;
-        lastX = item.x;
       }
       
-      lineText = lineText.trim();
-      if (!lineText) continue;
+      const isBold = item.fontName?.toLowerCase().includes('bold') ?? false;
+      const isItalic = item.fontName?.toLowerCase().includes('italic') ?? false;
       
-      // Determine if this line should start a new paragraph
-      let startNewParagraph = false;
+      runs.push({
+        text: item.str,
+        bold: isBold,
+        italic: isItalic,
+        size: Math.round(item.height * 2),
+        font: sanitizeFont(item.fontName),
+      });
       
-      if (prevY !== null) {
-        const yGap = prevY - lineGroup.y;
-        const fontSizeChange = prevFontSize && Math.abs(lineGroup.fontSize - prevFontSize) > 3;
-        
-        if (yGap > lineGroup.fontSize * 1.5 || fontSizeChange || lineText.length < 50) {
-          startNewParagraph = true;
-        }
-      } else {
-        startNewParagraph = true;
-      }
-      
-      // Save previous paragraph if starting new one
-      if (startNewParagraph && currentParagraph.length > 0) {
-        const paragraphText = currentParagraph.join(' ');
-        const fontSize = firstLineOfParagraph ? firstLineOfParagraph.fontSize : 12;
-        
-        const options: any = {
-          children: [new TextRun(paragraphText)],
-          spacing: { line: 360, before: 120, after: 120 }
-        };
-        
-        if (fontSize > 16) {
-          options.heading = HeadingLevel.HEADING_1;
-          options.spacing.before = 240;
-          options.spacing.after = 120;
-        } else if (fontSize > 14) {
-          options.heading = HeadingLevel.HEADING_2;
-          options.spacing.before = 200;
-        }
-        
-        if (firstLineOfParagraph) {
-          const avgX = firstLineOfParagraph.items.reduce((sum, item) => sum + item.x, 0) / firstLineOfParagraph.items.length;
-          if (avgX > viewport.width * 0.3 && avgX < viewport.width * 0.7 && paragraphText.length < 80) {
-            options.alignment = AlignmentType.CENTER;
-          }
-        }
-        
-        allParagraphs.push(new Paragraph(options));
-        currentParagraph = [];
-        firstLineOfParagraph = null;
-      }
-      
-      // Start new paragraph tracking
-      if (currentParagraph.length === 0) {
-        firstLineOfParagraph = lineGroup;
-      }
-      
-      currentParagraph.push(lineText);
-      prevY = lineGroup.y;
-      prevFontSize = lineGroup.fontSize;
+      fullText += item.str;
+      if (isBold) hasBold = true;
+      if (isItalic) hasItalic = true;
     }
     
-    // Add final paragraph
-    if (currentParagraph.length > 0) {
-      allParagraphs.push(
+    if (!fullText.trim()) return null;
+    
+    const fontSize = lineGroup.avgFontSize;
+    const isLarge = fontSize > 14;
+    const isVeryLarge = fontSize > 18;
+    const isSmall = fontSize < 10;
+    
+    const avgX = lineGroup.items.reduce((sum: number, item: any) => sum + item.x, 0) / lineGroup.items.length;
+    const isCentered = avgX > pageWidth * 0.35 && avgX < pageWidth * 0.65;
+    const isRightAligned = avgX > pageWidth * 0.65;
+    
+    let alignment: 'left' | 'center' | 'right' | 'justify' = 'left';
+    if (isCentered) alignment = 'center';
+    if (isRightAligned) alignment = 'right';
+    
+    let type: 'heading1' | 'heading2' | 'body' | 'caption' | 'list' = 'body';
+    
+    if (isVeryLarge && (isCentered || hasBold)) {
+      type = 'heading1';
+    } else if (isLarge && (hasBold || isCentered)) {
+      type = 'heading2';
+    } else if (isSmall || (isSmall && isItalic)) {
+      type = 'caption';
+    } else if (fullText.match(/^[\s•\-\*]\s+/)) {
+      type = 'list';
+    }
+    
+    return {
+      type,
+      text: fullText.trim(),
+      runs,
+      alignment,
+      fontSize,
+      isLarge,
+      isBold: hasBold,
+      isItalic: hasItalic,
+    };
+  };
+  
+  // Helper function to create formatted paragraphs
+  const createFormattedParagraphs = (elements: any[]) => {
+    const paragraphs: Paragraph[] = [];
+    
+    for (const element of elements) {
+      const textRuns = element.runs.map((run: any) => 
+        new TextRun({
+          text: run.text,
+          bold: run.bold,
+          italics: run.italic,
+          size: run.size || 22,
+          font: run.font || 'Calibri',
+        })
+      );
+      
+      const options: any = {
+        children: textRuns,
+        alignment: element.alignment === 'center' ? AlignmentType.CENTER : 
+                   element.alignment === 'right' ? AlignmentType.RIGHT :
+                   AlignmentType.LEFT,
+        spacing: {
+          line: 360,
+          before: element.type.includes('heading') ? 240 : element.isLarge ? 120 : 60,
+          after: element.type.includes('heading') ? 120 : 60,
+        },
+      };
+      
+      if (element.type === 'heading1') {
+        options.heading = HeadingLevel.HEADING_1;
+        options.bold = true;
+        options.spacing.before = 360;
+        options.spacing.after = 180;
+      } else if (element.type === 'heading2') {
+        options.heading = HeadingLevel.HEADING_2;
+        options.spacing.before = 240;
+        options.spacing.after = 120;
+      } else if (element.type === 'caption') {
+        options.italics = true;
+        options.spacing.after = 40;
+      } else if (element.type === 'list') {
+        options.spacing = { line: 240, before: 40, after: 40 };
+      }
+      
+      paragraphs.push(new Paragraph(options));
+    }
+    
+    return paragraphs;
+  };
+  
+  // Process each page
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1.0 });
+    
+    // Add page break
+    if (pageNum > 1) {
+      allSections.push(
         new Paragraph({
-          children: [new TextRun(currentParagraph.join(' '))],
-          spacing: { line: 360, before: 120, after: 120 }
+          text: '',
+          pageBreakBefore: true,
         })
       );
     }
+    
+    // Analyze page structure
+    const lineGroups = groupTextByPosition(textContent.items, viewport.width);
+    const pageElements = lineGroups
+      .map(group => analyzeLineGroup(group, viewport.width))
+      .filter(el => el !== null);
+    
+    // Create paragraphs with better formatting
+    const pageParagraphs = createFormattedParagraphs(pageElements);
+    allSections.push(...pageParagraphs);
   }
   
+  // Create document
   const doc = new Document({
     sections: [{
       properties: {
@@ -826,13 +883,51 @@ export async function convertPdfToWord(file: File): Promise<Blob> {
             right: 1440,
             bottom: 1440,
             left: 1440,
-          }
-        }
+          },
+        },
       },
-      children: allParagraphs
-    }]
+      children: allSections.length > 0 ? allSections : [
+        new Paragraph({
+          text: 'No text content found. This may be a scanned image-based PDF. Consider using LibreOffice for better quality conversion.',
+          italics: true,
+        }),
+      ],
+    }],
   });
   
   const blob = await Packer.toBlob(doc);
   return blob;
+}
+
+// Helper function to sanitize and map PDF fonts to standard fonts
+function sanitizeFont(fontName?: string): string {
+  if (!fontName) return 'Calibri';
+  
+  const sanitized = fontName
+    .replace(/\+\w+/, '') // Remove Adobe font prefixes
+    .replace(/[^a-zA-Z0-9\s-]/g, ''); // Remove special characters
+  
+  // Map common PDF fonts to Word-available fonts
+  const fontMap: { [key: string]: string } = {
+    'Helvetica': 'Calibri',
+    'Times': 'Times New Roman',
+    'Courier': 'Courier New',
+    'Symbol': 'Wingdings',
+    'ZapfDingbats': 'Wingdings',
+    'Arial': 'Arial',
+    'Georgia': 'Georgia',
+    'Verdana': 'Verdana',
+    'Comic': 'Comic Sans MS',
+    'Trebuchet': 'Trebuchet MS',
+  };
+  
+  // Check mappings
+  for (const [key, value] of Object.entries(fontMap)) {
+    if (sanitized.toLowerCase().includes(key.toLowerCase())) {
+      return value;
+    }
+  }
+  
+  // Return sanitized name or fallback
+  return sanitized || 'Calibri';
 }

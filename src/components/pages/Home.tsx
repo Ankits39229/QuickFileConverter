@@ -1,6 +1,12 @@
 import { BookCopy, FileSpreadsheet, Presentation, FileText, Image, Zap, Shield, Folder } from 'lucide-react';
 
 const HomePage = () => {
+  const handleNavigate = (page: string) => {
+    if (typeof window !== 'undefined' && (window as any).navigateToPage) {
+      (window as any).navigateToPage(page);
+    }
+  };
+
   return (
     <div style={{
       minHeight: 'calc(100vh - 60px)',
@@ -47,33 +53,36 @@ const HomePage = () => {
         marginBottom: '48px'
       }}>
         {[
-          { icon: BookCopy, title: 'PDF', desc: 'Merge, split, compress & convert PDFs', color: '#e53e3e' },
-          { icon: FileSpreadsheet, title: 'Excel', desc: 'Process spreadsheets and data files', color: '#38a169' },
-          { icon: Presentation, title: 'PowerPoint', desc: 'Create and convert presentations', color: '#dd6b20' },
-          { icon: FileText, title: 'Word', desc: 'Handle document files efficiently', color: '#3182ce' },
-          { icon: Image, title: 'Image', desc: 'Convert and optimize images', color: '#805ad5' }
+          { icon: BookCopy, title: 'PDF', desc: 'Merge, split, compress & convert PDFs', color: '#e53e3e', page: 'tools' },
+          { icon: FileSpreadsheet, title: 'Excel', desc: 'Process spreadsheets and data files', color: '#38a169', page: 'exceltools' },
+          { icon: Presentation, title: 'PowerPoint', desc: 'Create and convert presentations', color: '#dd6b20', page: 'powerpointtools' },
+          { icon: FileText, title: 'Word', desc: 'Handle document files efficiently', color: '#3182ce', page: 'logs' },
+          { icon: Image, title: 'Image', desc: 'Convert and optimize images', color: '#805ad5', page: 'processespage' }
         ].map((tool, idx) => {
           const IconComponent = tool.icon;
           return (
-            <div key={idx} style={{
-              backgroundColor: 'white',
-              padding: '32px 24px',
-              borderRadius: '12px',
-              border: '1px solid #e2e8f0',
-              transition: 'all 0.2s ease',
-              cursor: 'default',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.1)';
-              e.currentTarget.style.borderColor = tool.color;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
-              e.currentTarget.style.borderColor = '#e2e8f0';
-            }}>
+            <div 
+              key={idx} 
+              onClick={() => handleNavigate(tool.page)}
+              style={{
+                backgroundColor: '#EAF4F4',
+                padding: '32px 24px',
+                borderRadius: '12px',
+                border: '1px solid #CCE3DE',
+                transition: 'all 0.2s ease',
+                cursor: 'pointer',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.1)';
+                e.currentTarget.style.borderColor = tool.color;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                e.currentTarget.style.borderColor = '#e2e8f0';
+              }}>
               <div style={{
                 width: '56px',
                 height: '56px',
@@ -122,10 +131,10 @@ const HomePage = () => {
           const IconComponent = feature.icon;
           return (
             <div key={idx} style={{
-              backgroundColor: 'white',
+              backgroundColor: '#EAF4F4',
               padding: '24px',
               borderRadius: '10px',
-              border: '1px solid #e2e8f0',
+              border: '1px solid #CCE3DE',
               display: 'flex',
               alignItems: 'flex-start',
               gap: '16px'
